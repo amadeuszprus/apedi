@@ -1,0 +1,137 @@
+name: apedi
+title: Apedi
+summary: Fast, simple text editor with syntax highlighting, projects and terminal
+description: |
+  Apedi is a lightweight GTK 4 / GtkSourceView 5 editor that stays out of
+  your way. It bundles formatters and a small set of IDE conveniences while
+  keeping the start-up footprint of a plain text editor.
+
+  Features:
+    * Multi-tab, multi-window, drag & drop
+    * Syntax highlighting for ~150 languages
+    * Code formatting (Ctrl+Shift+I) via bundled black / prettier /
+      gofmt / rustfmt / clang-format / shfmt
+    * Multi-project sidebar — .gitignore-aware, per-extension icons and
+      colors, auto-reveal of the active tab
+    * Quick Open (Ctrl+P) and Find in Files (Ctrl+Shift+F)
+    * Go to Symbol in file (Ctrl+M)
+    * Integrated VTE terminal with bash and zsh (Ctrl+\`)
+    * Optional autosave (delay / focus loss)
+    * Crash recovery: drafts survive unexpected exits
+    * File watcher — external edits reload, or warn if dirty
+    * Localized UI (English, Polski)
+    * Snippets, code folding, tabbed Preferences, dark / light / auto theme
+    * Strict snap confinement — no host-write access beyond the user's home
+      and any drives plugged in via removable-media
+
+  Default keybindings follow gedit / VS Code conventions.
+license: MIT
+base: core24
+confinement: strict
+grade: stable
+version: '0.7.2'
+icon: data/pl.aprus.apedi.svg
+contact: aprus@codesty.pl
+donation: https://buycoffee.to/aprus
+
+apps:
+  apedi:
+    command: bin/apedi
+    extensions: [gnome]
+    plugs:
+      - home
+      - removable-media
+      - network
+    slots: [apedi-dbus]
+    desktop: usr/share/applications/pl.aprus.apedi.desktop
+    environment:
+      PATH: $SNAP/usr/bin:$SNAP/bin:$SNAP/lib/node_modules/.bin:$PATH
+
+slots:
+  apedi-dbus:
+    interface: dbus
+    bus: session
+    name: pl.aprus.apedi
+
+parts:
+  editor:
+    plugin: python
+    source: .
+    python-packages:
+      - PyGObject
+      - chardet
+      - black
+      - pathspec
+    stage-packages:
+      - python3-gi
+      - gir1.2-gtksource-5
+      - gir1.2-vte-3.91
+      - libvte-2.91-gtk4-0
+      - bash
+      - zsh
+    prime:
+      # Confirmed unused by linter and safe (do not touch GTK/Pango/HarfBuzz —
+      # any ABI mismatch with gnome-46-2404 breaks `libharfbuzz-subset` and
+      # the whole `gi.repository.Gdk` import chain).
+      - -usr/lib/x86_64-linux-gnu/libcolordprivate*
+      - -usr/lib/x86_64-linux-gnu/libdconf*
+      - -usr/lib/x86_64-linux-gnu/libicuio*
+      - -usr/lib/x86_64-linux-gnu/libicutest*
+
+  formatters-apt:
+    plugin: nil
+    stage-packages:
+      - clang-format
+      - shfmt
+      - golang-go
+      - rustfmt
+
+  formatters-prettier:
+    plugin: nil
+    build-packages: [curl, xz-utils, ca-certificates]
+    override-build: |
+      NODE_VER=20.11.0
+      NODE_TAR=node-v${NODE_VER}-linux-x64.tar.xz
+      curl -fsSLo /tmp/${NODE_TAR} "https://nodejs.org/dist/v${NODE_VER}/${NODE_TAR}"
+      mkdir -p $CRAFT_PART_INSTALL
+      tar -xJf /tmp/${NODE_TAR} -C $CRAFT_PART_INSTALL --strip-components=1
+      PATH="$CRAFT_PART_INSTALL/bin:$PATH" \
+        $CRAFT_PART_INSTALL/bin/npm install -g --prefix $CRAFT_PART_INSTALL prettier@3
+      rm /tmp/${NODE_TAR}
+
+  desktop-data:
+    plugin: dump
+    source: data/
+    organize:
+      pl.aprus.apedi.desktop: usr/share/applications/pl.aprus.apedi.desktop
+      pl.aprus.apedi.svg: usr/share/icons/hicolor/scalable/apps/pl.aprus.apedi.svg
+      pl.aprus.apedi.metainfo.xml: usr/share/metainfo/pl.aprus.apedi.metainfo.xml
+      snippets/apedi.snippets: usr/share/apedi/snippets/apedi.snippets
+    stage:
+      - usr/share/applications/*
+      - usr/share/icons/hicolor/scalable/apps/*
+      - usr/share/metainfo/*
+      - usr/share/apedi/snippets/*
+
+  changelog:
+    plugin: dump
+    source: .
+    organize:
+      CHANGELOG.md: usr/share/apedi/CHANGELOG.md
+    stage:
+      - usr/share/apedi/CHANGELOG.md
+    prime:
+      - usr/share/apedi/CHANGELOG.md
+
+  translations:
+    plugin: nil
+    source: data/po
+    build-packages: [gettext]
+    override-build: |
+      mkdir -p $CRAFT_PART_INSTALL/usr/share/locale
+      for po in $CRAFT_PART_SRC/*.po; do
+        [ -e "$po" ] || continue
+        lang=$(basename "$po" .po)
+        mkdir -p "$CRAFT_PART_INSTALL/usr/share/locale/$lang/LC_MESSAGES"
+        msgfmt "$po" -o "$CRAFT_PART_INSTALL/usr/share/locale/$lang/LC_MESSAGES/apedi.mo"
+      done

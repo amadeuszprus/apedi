@@ -1,0 +1,196 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: apedi 0.5.0\n"
+"Report-Msgid-Bugs-To: aprus@codesty.pl\n"
+"POT-Creation-Date: 2026-05-06\n"
+"PO-Revision-Date: 2026-05-06\n"
+"Last-Translator: aprus <aprus@codesty.pl>\n"
+"Language-Team: Polish\n"
+"Language: pl\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+
+# Menu — File
+msgid "New Tab"
+msgstr "Nowa zakładka"
+
+msgid "New Window"
+msgstr "Nowe okno"
+
+msgid "Open…"
+msgstr "Otwórz…"
+
+msgid "Open Project…"
+msgstr "Otwórz projekt…"
+
+msgid "Open Recent"
+msgstr "Otwórz ostatnio używane"
+
+msgid "Save"
+msgstr "Zapisz"
+
+msgid "Save As…"
+msgstr "Zapisz jako…"
+
+# Menu — Edit
+msgid "Find…"
+msgstr "Znajdź…"
+
+msgid "Replace…"
+msgstr "Zamień…"
+
+msgid "Go to Line…"
+msgstr "Przejdź do linii…"
+
+msgid "Go to Symbol…"
+msgstr "Przejdź do symbolu…"
+
+msgid "Format Code"
+msgstr "Formatuj kod"
+
+# Menu — View
+msgid "Toggle Sidebar"
+msgstr "Pokaż/ukryj panel boczny"
+
+msgid "Toggle Terminal"
+msgstr "Pokaż/ukryj terminal"
+
+msgid "Toggle Word Wrap"
+msgstr "Zawijanie wierszy"
+
+msgid "Toggle Line Numbers"
+msgstr "Numery linii"
+
+msgid "Toggle Dark Mode"
+msgstr "Tryb ciemny"
+
+# Menu — App
+msgid "Preferences…"
+msgstr "Preferencje…"
+
+msgid "Close Tab"
+msgstr "Zamknij zakładkę"
+
+msgid "Close Window"
+msgstr "Zamknij okno"
+
+msgid "Quit"
+msgstr "Zakończ"
+
+# Sidebar
+msgid "No project"
+msgstr "Brak projektu"
+
+msgid "Open Project (Ctrl+Shift+O)"
+msgstr "Otwórz projekt (Ctrl+Shift+O)"
+
+# Preferences — page titles
+msgid "Preferences"
+msgstr "Preferencje"
+
+msgid "Appearance"
+msgstr "Wygląd"
+
+msgid "Editor"
+msgstr "Edytor"
+
+msgid "Files"
+msgstr "Pliki"
+
+msgid "Sidebar"
+msgstr "Panel boczny"
+
+msgid "System"
+msgstr "System"
+
+# Preferences — Appearance
+msgid "Editor color scheme"
+msgstr "Schemat kolorów edytora"
+
+msgid "Window theme"
+msgstr "Motyw okna"
+
+msgid "Font"
+msgstr "Czcionka"
+
+msgid "Follow system"
+msgstr "Zgodnie z systemem"
+
+msgid "Light"
+msgstr "Jasny"
+
+msgid "Dark"
+msgstr "Ciemny"
+
+# Preferences — Editor
+msgid "Tab width"
+msgstr "Szerokość tabulacji"
+
+msgid "Indent with spaces"
+msgstr "Wcięcia spacjami"
+
+msgid "Wrap long lines"
+msgstr "Zawijaj długie linie"
+
+msgid "Show line numbers"
+msgstr "Pokaż numery linii"
+
+msgid "Auto indent"
+msgstr "Automatyczne wcięcia"
+
+msgid "Trim trailing whitespace on save"
+msgstr "Usuwaj spacje końcowe przy zapisie"
+
+# Preferences — Files
+msgid "Autosave"
+msgstr "Automatyczny zapis"
+
+msgid "Autosave delay (ms)"
+msgstr "Opóźnienie automatycznego zapisu (ms)"
+
+msgid "Off"
+msgstr "Wyłączony"
+
+msgid "After delay"
+msgstr "Po przerwie w pisaniu"
+
+msgid "On focus loss"
+msgstr "Po utracie ogniska"
+
+# Preferences — Sidebar
+msgid "Show project sidebar"
+msgstr "Pokaż panel projektu"
+
+msgid "Compact sidebar"
+msgstr "Kompaktowy panel"
+
+msgid "Extra ignore patterns"
+msgstr "Dodatkowe wzorce ignorowania"
+
+msgid "e.g. *.log, build/, secrets.txt"
+msgstr "np. *.log, build/, secrets.txt"
+
+# Preferences — System
+msgid "Show in file manager 'Open with' menu"
+msgstr "Pokaż w menu „Otwórz za pomocą” menedżera plików"
+
+msgid "Language (restart required)"
+msgstr "Język (wymagany restart)"
+
+msgid "System default"
+msgstr "Domyślny systemu"
+
+# Status messages
+msgid "Already formatted"
+msgstr "Już sformatowane"
+
+msgid "Formatted ({lang_id})"
+msgstr "Sformatowano ({lang_id})"
+
+msgid "No formatter for {lang_id}"
+msgstr "Brak formatera dla {lang_id}"
+
+msgid "No language detected"
+msgstr "Nie wykryto języka"

@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Apedi
+GenericName=Text Editor
+Comment=A fast, simple text editor with syntax highlighting and code formatting
+Exec=apedi %F
+Icon=pl.aprus.apedi
+Terminal=false
+Categories=Utility;TextEditor;GTK;
+MimeType=text/plain;text/markdown;text/x-readme;text/x-changelog;text/x-log;text/x-script;application/x-zerosize;text/x-python;application/x-python;application/x-python3;text/x-c;text/x-csrc;text/x-chdr;text/x-c++;text/x-c++src;text/x-c++hdr;text/x-objc;text/x-java;text/x-go;text/x-rust;text/x-kotlin;text/x-scala;text/x-swift;text/x-dart;text/x-haskell;text/x-erlang;text/x-elixir;text/x-clojure;text/x-perl;text/x-ruby;application/x-ruby;text/x-php;application/x-php;application/javascript;application/x-javascript;text/javascript;text/jsx;text/typescript;application/typescript;application/json;application/x-jsonc;application/json5;text/html;application/xhtml+xml;application/xml;text/xml;text/css;text/x-scss;text/x-less;text/x-sass;text/x-stylus;text/x-vue;text/x-svelte;application/sql;text/x-sql;text/x-shellscript;application/x-shellscript;application/x-csh;application/x-zsh;application/x-fish;application/x-yaml;application/yaml;application/toml;text/x-toml;text/x-makefile;text/x-cmake;application/x-cmake;text/x-dockerfile;text/x-lua;text/x-r;text/x-tcl;text/x-vala;text/x-fortran;text/x-asm;text/x-pascal;text/x-properties;text/x-ini;text/x-systemd-unit;text/x-tex;text/x-bibtex;text/x-diff;text/x-patch;application/x-desktop;application/x-csv;text/csv;text/tab-separated-values;
+StartupNotify=true
+Keywords=editor;text;code;programming;

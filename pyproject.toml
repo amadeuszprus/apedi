@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "apedi"
+version = "0.7.2"
+description = "A fast, simple text editor with syntax highlighting and code formatting"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "aprus" }]
+dependencies = [
+    "PyGObject>=3.46",
+    "chardet>=5.0",
+    "pathspec>=0.12",
+]
+
+[project.scripts]
+apedi = "apedi.app:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[tool.setuptools.packages.find]
+include = ["apedi*"]
+exclude = ["tests*", "docs*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

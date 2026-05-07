@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>pl.aprus.apedi</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Apedi</name>
+  <summary>Fast, simple text editor with projects and terminal</summary>
+  <description>
+    <p>
+      Apedi is a lightweight GTK 4 / GtkSourceView 5 editor with bundled code
+      formatters, multi-project sidebar, integrated terminal, and the small
+      set of IDE conveniences a polyglot developer reaches for daily.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Multi-tab, multi-window editing</li>
+      <li>Syntax highlighting for ~150 languages</li>
+      <li>Code formatting (Ctrl+Shift+I) via bundled black, prettier, gofmt, rustfmt, clang-format, shfmt</li>
+      <li>Multi-project sidebar with .gitignore awareness, per-extension icons and colors</li>
+      <li>Quick Open (Ctrl+P), Find in Files (Ctrl+Shift+F), Go to Symbol (Ctrl+M)</li>
+      <li>Integrated VTE terminal with bash and zsh (Ctrl+`)</li>
+      <li>Optional autosave, crash recovery, external-change watcher</li>
+      <li>Auto / light / dark theme; localized UI (English, Polski)</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">pl.aprus.apedi.desktop</launchable>  <developer_name>aprus</developer_name>
+  <provides>
+    <binary>apedi</binary>
+  </provides>
+  <categories>
+    <category>Development</category>
+    <category>Utility</category>
+    <category>TextEditor</category>
+  </categories>
+  <content_rating type="oars-1.1"/>  <releases>
+    <release version="0.7.0" date="2026-05-07">
+      <description><p>Quick Open, Find in Files, integrated About, snippets, crash recovery, file watcher, expanded keyboard cheat-sheet.</p></description>
+    </release>
+    <release version="0.6.0" date="2026-05-06">
+      <description><p>Multiple open projects in the sidebar.</p></description>
+    </release>
+    <release version="0.5.0" date="2026-05-06">
+      <description><p>Tabbed Preferences, internationalization (Polish), autosave, file-manager registration toggle.</p></description>
+    </release>
+    <release version="0.4.0" date="2026-05-06">
+      <description><p>Gitignore-aware sidebar, ignore patterns, compact mode, symbol palette.</p></description>
+    </release>
+    <release version="0.3.0" date="2026-05-05">
+      <description><p>Project sidebar, What's New dialog, Replace on Ctrl+R, integrated terminal.</p></description>
+    </release>
+    <release version="0.2.0" date="2026-05-05">
+      <description><p>Preferences dialog, dark mode, snap startup fixes.</p></description>
+    </release>
+    <release version="0.1.0" date="2026-05-04">
+      <description><p>Initial release.</p></description>
+    </release>
+  </releases>
+</component>

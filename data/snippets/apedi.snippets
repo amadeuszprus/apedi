@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<snippets _group="Apedi">
+  <snippet _name="if __name__ == '__main__'" trigger="ifmain" languages="python;python3">
+    <text><![CDATA[if __name__ == "__main__":
+    $0]]></text>
+  </snippet>
+
+  <snippet _name="def function" trigger="def" languages="python;python3">
+    <text><![CDATA[def ${1:name}(${2:args}) -> ${3:None}:
+    ${4:pass}
+$0]]></text>
+  </snippet>
+
+  <snippet _name="class" trigger="cls" languages="python;python3">
+    <text><![CDATA[class ${1:Name}:
+    def __init__(self, ${2:args}) -> None:
+        ${3:pass}
+$0]]></text>
+  </snippet>
+
+  <snippet _name="dataclass" trigger="dc" languages="python;python3">
+    <text><![CDATA[@dataclass
+class ${1:Name}:
+    ${2:field}: ${3:type}
+$0]]></text>
+  </snippet>
+
+  <snippet _name="console.log" trigger="cl" languages="javascript;js;typescript">
+    <text><![CDATA[console.log($0);]]></text>
+  </snippet>
+
+  <snippet _name="function" trigger="fn" languages="javascript;js;typescript">
+    <text><![CDATA[function ${1:name}(${2:args}) {
+    $0
+}]]></text>
+  </snippet>
+
+  <snippet _name="HTML5 boilerplate" trigger="html5" languages="html">
+    <text><![CDATA[<!DOCTYPE html>
+<html lang="${1:en}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${2:Title}</title>
+</head>
+<body>
+    $0
+</body>
+</html>]]></text>
+  </snippet>
+
+  <snippet _name="main()" trigger="fn" languages="rust">
+    <text><![CDATA[fn ${1:main}(${2:}) ${3:-> ()} {
+    $0
+}]]></text>
+  </snippet>
+
+  <snippet _name="package main" trigger="pkgmain" languages="go">
+    <text><![CDATA[package main
+
+import "fmt"
+
+func main() {
+    $0
+}]]></text>
+  </snippet>
+
+  <snippet _name="for loop" trigger="for" languages="c;cpp">
+    <text><![CDATA[for (${1:int} ${2:i} = ${3:0}; ${2} < ${4:n}; ${2}++) {
+    $0
+}]]></text>
+  </snippet>
+</snippets>
