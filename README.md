@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="data/apedi-icon.png" alt="Apedi" width="180">
+</p>
+
 # Apedi
 
 A fast, simple text editor with syntax highlighting, code formatting,
