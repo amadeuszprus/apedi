@@ -54,10 +54,20 @@ def present(parent: Gtk.Window) -> None:
     _add(edit_group, "<Primary><Shift>i",     _("Format current file"))
     section.add_group(edit_group)
 
+    # Sidebar
+    sidebar_group = Gtk.ShortcutsGroup(title=_("Sidebar"))
+    _add(sidebar_group, "<Primary><Alt>n",        _("New file in selected folder"))
+    _add(sidebar_group, "<Primary><Alt><Shift>n", _("New folder in selected folder"))
+    _add(sidebar_group, "<Primary><Alt>f",        _("Find in selected file/folder"))
+    _add(sidebar_group, "<Primary><Alt>h",        _("Replace in selected file/folder"))
+    section.add_group(sidebar_group)
+
     # View
     view_group = Gtk.ShortcutsGroup(title=_("View"))
     _add(view_group, "F9",                    _("Toggle sidebar"))
     _add(view_group, "<Primary>grave",        _("Toggle terminal"))
+    _add(view_group, "<Primary><Shift>grave", _("New terminal"))
+    _add(view_group, "<Primary><Shift>m",     _("Toggle Markdown preview"))
     _add(view_group, "<Primary>comma",        _("Preferences"))
     _add(view_group, "<Primary><Shift>d",     _("Cycle theme: auto / light / dark"))
     section.add_group(view_group)

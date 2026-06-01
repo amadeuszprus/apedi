@@ -29,7 +29,7 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.2'
+version: '0.7.8'
 icon: data/pl.aprus.apedi.svg
 contact: aprus@codesty.pl
 donation: https://buycoffee.to/aprus
@@ -46,6 +46,11 @@ apps:
     desktop: usr/share/applications/pl.aprus.apedi.desktop
     environment:
       PATH: $SNAP/usr/bin:$SNAP/bin:$SNAP/lib/node_modules/.bin:$PATH
+      # gnome-46-2404 content snap ships a newer libmedia-gstreamer.so that
+      # references GDK 4.16 symbols, but core24 has GDK 4.14 — the load
+      # crashes the process. Markdown preview is rendered via Pango/GtkLabel
+      # so we don't need GTK media playback at all.
+      GDK_MEDIA: "none"
 
 slots:
   apedi-dbus:
@@ -62,6 +67,7 @@ parts:
       - chardet
       - black
       - pathspec
+      - markdown
     stage-packages:
       - python3-gi
       - gir1.2-gtksource-5
@@ -69,6 +75,15 @@ parts:
       - libvte-2.91-gtk4-0
       - bash
       - zsh
+    override-stage: |
+      craftctl default
+      # Strip system locales we don't ship UI translations for. Apedi's own
+      # gettext .mo files live under the `translations` part and are
+      # untouched.
+      if [ -d "$CRAFT_STAGE/usr/share/locale" ]; then
+        find "$CRAFT_STAGE/usr/share/locale" -mindepth 1 -maxdepth 1 -type d \
+          ! -name en ! -name en_US ! -name pl -exec rm -rf {} +
+      fi
     prime:
       # Confirmed unused by linter and safe (do not touch GTK/Pango/HarfBuzz —
       # any ABI mismatch with gnome-46-2404 breaks `libharfbuzz-subset` and
@@ -83,8 +98,24 @@ parts:
     stage-packages:
       - clang-format
       - shfmt
-      - golang-go
       - rustfmt
+    prime:
+      # Try without the LLVM toolchain (~175 MB). If clang-format breaks
+      # at runtime, revert this single block.
+      - -usr/lib/llvm-18/**
+      - -usr/share/llvm-18/**
+
+  formatter-gofmt:
+    plugin: nil
+    build-packages: [curl, ca-certificates]
+    override-build: |
+      GO_VER=1.22.12
+      GO_TAR=go${GO_VER}.linux-amd64.tar.gz
+      curl -fsSLo /tmp/${GO_TAR} "https://go.dev/dl/${GO_TAR}"
+      mkdir -p $CRAFT_PART_INSTALL/bin
+      tar -xzf /tmp/${GO_TAR} -C /tmp go/bin/gofmt
+      install -m 0755 /tmp/go/bin/gofmt $CRAFT_PART_INSTALL/bin/gofmt
+      rm -rf /tmp/${GO_TAR} /tmp/go
 
   formatters-prettier:
     plugin: nil

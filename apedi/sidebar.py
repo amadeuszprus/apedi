@@ -13,7 +13,7 @@ if not hasattr(builtins, "_"):
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GObject, Gio, Gtk  # noqa: E402
+from gi.repository import Gdk, GObject, Gio, Gtk  # noqa: E402
 
 from .ignore_filter import IgnoreFilter
 
@@ -92,6 +92,8 @@ class ProjectSidebar(Gtk.Box):
         self._ignore_filters: dict[str, IgnoreFilter] = {}
         self._extra_ignore_patterns: list[str] = []
         self.on_close_project: Callable[[Path], None] | None = None
+        self.on_context_action: Callable[[str, Path], None] | None = None
+        self._context_path: Path | None = None
         self.root_path: Path | None = None  # kept for callers iterating active project
 
         header = Gtk.Box(
@@ -219,6 +221,22 @@ class ProjectSidebar(Gtk.Box):
         expander.set_child(box)
         item.set_child(expander)
 
+        right_click = Gtk.GestureClick.new()
+        right_click.set_button(3)
+        right_click.connect(
+            "pressed",
+            lambda g, n_press, x, y: self._on_right_click(box, x, y),
+        )
+        box.add_controller(right_click)
+
+        long_press = Gtk.GestureLongPress.new()
+        long_press.set_touch_only(True)
+        long_press.connect(
+            "pressed",
+            lambda g, x, y: self._on_right_click(box, x, y),
+        )
+        box.add_controller(long_press)
+
     def _bind_item(self, _factory: Gtk.SignalListItemFactory, item: Gtk.ListItem) -> None:
         from . import style
 
@@ -230,6 +248,8 @@ class ProjectSidebar(Gtk.Box):
         icon: Gtk.Image = box.get_first_child()
         label: Gtk.Label = icon.get_next_sibling()
         close_btn: Gtk.Button = label.get_next_sibling()
+
+        box._apedi_node = node
 
         prev_handler = getattr(close_btn, "_apedi_handler", 0)
         if prev_handler:
@@ -264,6 +284,86 @@ class ProjectSidebar(Gtk.Box):
             self.on_close_project(path)
         else:
             self.remove_project(path)
+
+    def _on_right_click(self, box: Gtk.Box, x: float, y: float) -> None:
+        node: FileNode | None = getattr(box, "_apedi_node", None)
+        if node is None:
+            return
+        path = Path(node.path_str)
+        self._context_path = path
+        self._show_context_popover(box, x, y, node)
+
+    def _show_context_popover(
+        self, anchor: Gtk.Widget, x: float, y: float, node: FileNode,
+    ) -> None:
+        is_dir = node.is_dir
+        scope_label = _("Folder") if is_dir else _("File")
+        path = Path(node.path_str)
+
+        popover = Gtk.Popover()
+        popover.set_has_arrow(True)
+        popover.set_autohide(True)
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2,
+                        margin_top=4, margin_bottom=4, margin_start=4, margin_end=4)
+
+        def add_button(label: str, action_id: str) -> None:
+            btn = Gtk.Button(label=label)
+            btn.set_halign(Gtk.Align.FILL)
+            inner = btn.get_first_child()
+            if isinstance(inner, Gtk.Label):
+                inner.set_xalign(0)
+            btn.add_css_class("flat")
+            btn.set_has_frame(False)
+            btn.connect("clicked", lambda *_: self._dispatch_action(popover, action_id, path))
+            outer.append(btn)
+
+        def add_separator() -> None:
+            outer.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+
+        add_button(_("New File…"), "new-file")
+        add_button(_("New Folder…"), "new-folder")
+        add_separator()
+        add_button(_("Find in {scope}…").format(scope=scope_label), "find")
+        add_button(_("Replace in {scope}…").format(scope=scope_label), "replace")
+        add_button(_("Replace with…"), "replace-with")
+
+        popover.set_child(outer)
+        popover.set_parent(anchor)
+        rect = Gdk.Rectangle()
+        rect.x = int(x)
+        rect.y = int(y)
+        rect.width = 1
+        rect.height = 1
+        popover.set_pointing_to(rect)
+        popover.connect("closed", lambda p: p.unparent())
+        popover.popup()
+
+    def _dispatch_action(self, popover: Gtk.Popover, action_id: str, path: Path) -> None:
+        popover.popdown()
+        self._context_path = path
+        if self.on_context_action is not None:
+            self.on_context_action(action_id, path)
+
+    def get_context_path(self) -> Path | None:
+        """Path the user last interacted with: right-clicked > selected > root."""
+        if self._context_path is not None:
+            return self._context_path
+        if self._tree_model is not None:
+            sel = self.list_view.get_model()
+            if isinstance(sel, Gtk.SingleSelection):
+                pos = sel.get_selected()
+                if pos != Gtk.INVALID_LIST_POSITION:
+                    row = self._tree_model.get_row(pos)
+                    if row is not None:
+                        node: FileNode = row.get_item()
+                        return Path(node.path_str)
+        if self._projects:
+            return self._projects[-1]
+        return None
+
+    def clear_context_path(self) -> None:
+        self._context_path = None
 
     def _on_row_activated(self, _view: Gtk.ListView, position: int) -> None:
         if self._tree_model is None:

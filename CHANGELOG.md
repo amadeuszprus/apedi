@@ -3,6 +3,123 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.8] - 2026-06-01
+
+### Changed
+- **Startup performance.** Snap install shrinks from ~1.1 GB to ~580 MB
+  and cold launches noticeably faster (snap mount + AppArmor profile load
+  scale with snap size). Internal changes:
+  - WebKit removed: markdown preview now renders via Pango on a
+    `GtkLabel` instead of a `WebKit.WebView`. Tables render as a
+    monospace block with aligned columns; images become clickable
+    `[🖼 file]` placeholders (open in the system viewer). Links,
+    headings, lists, blockquotes, inline/block code and horizontal
+    rules render the same as before.
+  - Go SDK (~210 MB) replaced with just the `gofmt` binary bundled
+    from the upstream tarball.
+  - LLVM toolchain (~175 MB) excluded from the snap. If `clang-format`
+    breaks on your system, please file an issue — this is the riskiest
+    cut and can be reverted.
+  - System locales pruned to en / en_US / pl (Apedi's own translations
+    are unaffected).
+- **Lazier imports.** `python-markdown` is no longer pulled in unless
+  you actually open a markdown file. `EditorWindow` is imported on
+  first window creation, not at app module load time. Terminal panel
+  (Vte + shell startup) is deferred to a `GLib.idle_add` after the
+  window is shown.
+- **Fast `--version`.** The CLI gained `apedi --version` / `apedi -V`,
+  which short-circuits before importing GTK so it returns in ~10 ms.
+
+## [0.7.7] - 2026-05-14
+
+### Added
+- **Markdown preview.** Opening a `.md` / `.markdown` / `.mdown` / `.mkd` /
+  `.mkdn` file (or any buffer detected as markdown by GtkSourceView) splits
+  the tab in two: source editor on the left, a live rendered preview on the
+  right. The preview re-renders ~250 ms after the last keystroke. Headings,
+  lists, fenced code blocks, tables, blockquotes, inline code and links are
+  styled to follow the active light/dark theme.
+- **Toggle Markdown Preview** action (`Ctrl+Shift+M`, View menu entry).
+  Works on any tab regardless of file type — handy for `.txt` files
+  containing markdown.
+- **Preferences → Editor → Markdown preview (auto-open for .md)** switch.
+  Off disables the automatic split when opening a markdown file; the
+  manual toggle still works.
+- Link clicks inside the preview open external URLs in the system browser,
+  `file://` links to existing files open as a new tab in Apedi, and
+  in-document anchors jump within the preview.
+- Snap bundles `webkitgtk-6.0` so the preview works under strict
+  confinement out of the box.
+
+## [0.7.6] - 2026-05-10
+
+### Changed
+- Find/Replace in Files window is now modal over the editor and
+  no longer resizable. WMs reliably center transient + modal
+  windows, and the broken maximize button (which the WM would
+  show for resizable windows but couldn't apply to a snap-confined
+  transient) is gone. `Esc` closes the dialog.
+
+### Added
+- **Pre-fill search from selection.** When text is selected in
+  the active tab, triggering Find (`Ctrl+F`), Replace (`Ctrl+R`),
+  Find in Files (`Ctrl+Shift+F`), or any sidebar context-menu
+  Find/Replace puts the selection straight into the search input
+  (single-line selections up to 256 characters; multi-line
+  selections are ignored).
+
+## [0.7.5] - 2026-05-10
+
+### Fixed
+- *New File…* and *New Folder…* in the sidebar context menu
+  crashed with `TypeError: 'tuple' object is not callable`. Every
+  action callback in `EditorWindow` declared its variadic argument
+  as `*_: object`, which shadowed the gettext alias `_` inside the
+  method. As soon as the body called `_("…")` for an i18n string,
+  Python looked up the local tuple instead of the function.
+  Renamed the parameter to `*_args: object` everywhere — same
+  "ignored arg" hint, no shadow.
+- Input prompt window (used by *New File* / *New Folder*) now
+  declares itself non-resizable and ships a real default height,
+  so the WM treats it as a dialog and centers it over the editor
+  rather than dropping it at a default top-left position.
+
+## [0.7.4] - 2026-05-10
+
+### Fixed
+- Sidebar right-click menu items (New File, New Folder, Find,
+  Replace, Replace with) did nothing when activated. The popover
+  was a `Gtk.PopoverMenu` driven by `Gio.Menu` + `win.*` actions;
+  GTK4's action muxer didn't resolve those actions reliably for a
+  popover parented inside a `Gtk.ListView` factory cell. The
+  popover is now a plain `Gtk.Popover` with buttons that call
+  through directly. Keyboard shortcuts (Ctrl+Alt+N etc.) keep
+  using the actions and continue to work.
+
+## [0.7.3] - 2026-05-09
+
+### Added
+- **Sidebar collapse button** in the header bar (next to the
+  hamburger menu) — same action as `F9` / View → Toggle Sidebar.
+- **Multiple terminals.** The terminal panel now hosts a notebook
+  of terminal tabs. New "+" button in the panel header (and
+  `Ctrl+Shift+\``) opens another shell; each tab has its own close
+  button and middle-click closes it. Tabs are reorderable and a
+  tab is removed automatically when its shell exits.
+- **Sidebar right-click context menu** with five entries:
+  *New File…*, *New Folder…*, *Find in File/Folder…*,
+  *Replace in File/Folder…*, and *Replace with…* — all scoped to
+  the clicked path. Long-press works the same on touch.
+- **Replace in Files** mode for the search dialog. Adds a
+  "Replace with" input and a *Replace All* button (with a
+  confirmation prompt) that rewrites matches on disk.
+- **New keyboard shortcuts**:
+  - `Ctrl+Shift+\`` — new terminal
+  - `Ctrl+Alt+N` — new file in selected folder
+  - `Ctrl+Alt+Shift+N` — new folder in selected folder
+  - `Ctrl+Alt+F` — find scoped to selected sidebar node
+  - `Ctrl+Alt+H` — replace scoped to selected sidebar node
+
 ## [0.7.2] - 2026-05-07
 
 ### Fixed

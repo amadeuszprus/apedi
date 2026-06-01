@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apedi"
-version = "0.7.2"
+version = "0.7.8"
 description = "A fast, simple text editor with syntax highlighting and code formatting"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -14,10 +14,11 @@ dependencies = [
     "PyGObject>=3.46",
     "chardet>=5.0",
     "pathspec>=0.12",
+    "markdown>=3.5",
 ]
 
 [project.scripts]
-apedi = "apedi.app:main"
+apedi = "apedi.cli:main"
 
 [project.optional-dependencies]
 test = ["pytest>=8.0"]

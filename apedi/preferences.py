@@ -104,6 +104,9 @@ class PreferencesDialog(Gtk.Window):
 
         self.trim_switch = self._switch(self.settings.trim_trailing_whitespace)
         page.add(_("Trim trailing whitespace on save"), self.trim_switch)
+
+        self.md_preview_switch = self._switch(self.settings.markdown_preview_auto)
+        page.add(_("Markdown preview (auto-open for .md)"), self.md_preview_switch)
         return page.grid
 
     def _build_files_page(self) -> Gtk.Widget:
@@ -231,6 +234,7 @@ class PreferencesDialog(Gtk.Window):
             self.settings.show_line_numbers = self.lineno_switch.get_active()
             self.settings.auto_indent = self.autoindent_switch.get_active()
             self.settings.trim_trailing_whitespace = self.trim_switch.get_active()
+            self.settings.markdown_preview_auto = self.md_preview_switch.get_active()
 
             self.settings.show_sidebar = self.sidebar_switch.get_active()
             self.settings.sidebar_compact = self.compact_switch.get_active()

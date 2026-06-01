@@ -16,7 +16,7 @@ if not hasattr(builtins, "_"):
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GLib, GObject, Gio, Gtk  # noqa: E402
+from gi.repository import Gdk, GLib, GObject, Gio, Gtk  # noqa: E402
 
 from .ignore_filter import HEAVY_DIRS, IgnoreFilter
 
@@ -46,6 +46,12 @@ class _ResultRow(GObject.Object):
 def _iter_text_files(projects: list[Path], extra_patterns: list[str]):
     seen = 0
     for project in projects:
+        if project.is_file():
+            yield project
+            seen += 1
+            if seen >= _MAX_FILES_SCANNED:
+                return
+            continue
         if not project.is_dir():
             continue
         ignore = IgnoreFilter(project, extra_patterns)
@@ -121,24 +127,43 @@ class FindInFilesDialog(Gtk.Window):
         projects: list[Path],
         extra_patterns: list[str],
         on_chosen: Callable[[Path, int], None],
+        *,
+        with_replace: bool = False,
+        scope_label: str | None = None,
+        initial_query: str = "",
     ) -> None:
+        title = _("Replace in Files") if with_replace else _("Find in Files")
         super().__init__(
-            title=_("Find in Files"),
-            transient_for=parent, modal=False,
+            title=title,
+            transient_for=parent, modal=True,
             default_width=720, default_height=560,
         )
+        self.set_destroy_with_parent(True)
+        self.set_resizable(False)
         self.projects = projects
         self.extra_patterns = extra_patterns
         self.on_chosen = on_chosen
+        self.with_replace = with_replace
+
+        key_ctrl = Gtk.EventControllerKey()
+        key_ctrl.connect("key-pressed", self._on_key_pressed)
+        self.add_controller(key_ctrl)
 
         outer = Gtk.Box(
             orientation=Gtk.Orientation.VERTICAL, spacing=8,
             margin_top=10, margin_bottom=10, margin_start=12, margin_end=12,
         )
 
+        if scope_label:
+            scope = Gtk.Label(xalign=0)
+            scope.add_css_class("dim-label")
+            scope.set_text(_("Scope: {label}").format(label=scope_label))
+            outer.append(scope)
+
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.entry = Gtk.SearchEntry()
-        self.entry.set_placeholder_text(_("Search across open projects…"))
+        placeholder = _("Find…") if with_replace else _("Search across open projects…")
+        self.entry.set_placeholder_text(placeholder)
         self.entry.set_hexpand(True)
         self.entry.connect("activate", lambda *_: self._run())
         controls.append(self.entry)
@@ -156,6 +181,20 @@ class FindInFilesDialog(Gtk.Window):
         run_btn.connect("clicked", lambda *_: self._run())
         controls.append(run_btn)
         outer.append(controls)
+
+        if with_replace:
+            replace_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            self.replace_entry = Gtk.Entry()
+            self.replace_entry.set_placeholder_text(_("Replace with…"))
+            self.replace_entry.set_hexpand(True)
+            replace_row.append(self.replace_entry)
+            replace_btn = Gtk.Button.new_with_label(_("Replace All"))
+            replace_btn.add_css_class("destructive-action")
+            replace_btn.connect("clicked", lambda *_: self._confirm_replace_all())
+            replace_row.append(replace_btn)
+            outer.append(replace_row)
+        else:
+            self.replace_entry = None
 
         self.summary = Gtk.Label(xalign=0)
         self.summary.add_css_class("dim-label")
@@ -180,7 +219,23 @@ class FindInFilesDialog(Gtk.Window):
         outer.append(scrolled)
 
         self.set_child(outer)
+        if initial_query:
+            self.entry.set_text(initial_query)
+            GLib.idle_add(lambda: (self._run(), False)[1])
         self.entry.grab_focus()
+        self.entry.select_region(0, -1)
+
+    def _on_key_pressed(
+        self, _ctrl: Gtk.EventControllerKey, keyval: int, _keycode: int, _state: int,
+    ) -> bool:
+        if keyval == Gdk.KEY_Escape:
+            self.close()
+            return True
+        return False
+
+    def focus_replace_entry(self) -> None:
+        if self.replace_entry is not None:
+            self.replace_entry.grab_focus()
 
     def _setup_row(self, _factory, item: Gtk.ListItem) -> None:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10,
@@ -247,3 +302,90 @@ class FindInFilesDialog(Gtk.Window):
         if row is None or row.is_header:
             return
         self.on_chosen(Path(row.path_str), row.line)
+
+    def _confirm_replace_all(self) -> None:
+        if not self.with_replace or self.replace_entry is None:
+            return
+        query = self.entry.get_text()
+        if not query:
+            self.summary.set_markup(
+                f"<span color='red'>{GLib.markup_escape_text(_('Enter a query first'))}</span>"
+            )
+            return
+        replacement = self.replace_entry.get_text()
+        dialog = Gtk.AlertDialog()
+        dialog.set_message(_("Replace all matches?"))
+        dialog.set_detail(
+            _("This rewrites files on disk and cannot be undone. Continue?")
+        )
+        dialog.set_buttons([_("Cancel"), _("Replace")])
+        dialog.set_default_button(1)
+        dialog.set_cancel_button(0)
+
+        def on_response(dlg: Gtk.AlertDialog, result: Gio.AsyncResult) -> None:
+            try:
+                button = dlg.choose_finish(result)
+            except GLib.Error:
+                return
+            if button != 1:
+                return
+            self._do_replace_all(query, replacement)
+
+        dialog.choose(self, None, on_response)
+
+    def _do_replace_all(self, query: str, replacement: str) -> None:
+        flags = 0 if self.case_btn.get_active() else re.IGNORECASE
+        try:
+            if self.regex_btn.get_active():
+                pattern = re.compile(query, flags)
+                use_regex = True
+            else:
+                pattern = re.compile(re.escape(query), flags)
+                use_regex = False
+        except re.error as e:
+            self.summary.set_markup(
+                f"<span color='red'>{GLib.markup_escape_text(str(e))}</span>"
+            )
+            return
+        total = 0
+        files_changed = 0
+        for full in _iter_text_files(self.projects, self.extra_patterns):
+            try:
+                stat = full.stat()
+            except OSError:
+                continue
+            if stat.st_size > _MAX_FILE_BYTES:
+                continue
+            try:
+                with full.open("rb") as f:
+                    head = f.read(4096)
+            except OSError:
+                continue
+            if _looks_binary(head):
+                continue
+            try:
+                text = full.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
+            if use_regex:
+                new_text, n = pattern.subn(replacement, text)
+            else:
+                new_text, n = pattern.subn(
+                    replacement.replace("\\", "\\\\"), text,
+                )
+            if n == 0 or new_text == text:
+                continue
+            try:
+                full.write_text(new_text, encoding="utf-8")
+            except OSError as e:
+                log.warning("write failed for %s: %s", full, e)
+                continue
+            total += n
+            files_changed += 1
+        files_word = _("files") if files_changed != 1 else _("file")
+        self.summary.set_text(
+            _("Replaced {n} occurrence(s) in {f} {files_word}").format(
+                n=total, f=files_changed, files_word=files_word,
+            )
+        )
+        self._run()

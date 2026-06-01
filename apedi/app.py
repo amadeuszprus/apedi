@@ -20,8 +20,6 @@ from .shortcuts import SHORTCUTS
 i18n.configure_locale()
 i18n.install(Settings.load().language)
 
-from .window import EditorWindow  # noqa: E402  (must come after _() is bound)
-
 log = logging.getLogger(__name__)
 
 
@@ -186,10 +184,19 @@ class EditorApp(Gtk.Application):
         return False
 
     def new_window(self) -> EditorWindow:
+        from .window import EditorWindow
         return EditorWindow(self, self.settings)
 
     @staticmethod
     def _resolve(cwd: Path, name: str) -> Path:
+        # `gnome-terminal` Ctrl+click and other URI launchers pass paths as
+        # `file:///abs/path`. `Path()` doesn't understand the scheme — it
+        # treats the result as a relative path and joins it with cwd into
+        # garbage. Strip the URI prefix and URL-decode percent escapes.
+        if name.startswith("file://"):
+            from urllib.parse import unquote, urlparse
+            parsed = urlparse(name)
+            name = unquote(parsed.path)
         p = Path(name)
         return p if p.is_absolute() else (cwd / p).resolve()
 
