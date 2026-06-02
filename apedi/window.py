@@ -189,6 +189,12 @@ class EditorWindow(Gtk.ApplicationWindow):
 
     # ---------- UI construction ----------
 
+    @staticmethod
+    def _support_menu_item(label: str, uri: str) -> Gio.MenuItem:
+        item = Gio.MenuItem.new(label, None)
+        item.set_action_and_target_value("app.support", GLib.Variant.new_string(uri))
+        return item
+
     def _build_ui(self) -> None:
         header = Gtk.HeaderBar()
 
@@ -224,10 +230,13 @@ class EditorWindow(Gtk.ApplicationWindow):
         format_btn.set_tooltip_text(_("Format (Ctrl+Shift+I)"))
         header.pack_start(format_btn)
 
-        # Far-right: Buy me a coffee
-        coffee_btn = Gtk.Button(label="☕")
-        coffee_btn.set_tooltip_text(_("Buy me a coffee"))
-        coffee_btn.set_action_name("app.support")
+        # Far-right: Support menu (Ko-fi / Buy me a coffee)
+        coffee_menu = Gio.Menu()
+        coffee_menu.append_item(self._support_menu_item(_("Ko-fi"), "https://ko-fi.com/aprus"))
+        coffee_menu.append_item(self._support_menu_item(_("buycoffee.to"), "https://buycoffee.to/aprus"))
+        coffee_btn = Gtk.MenuButton(label="☕")
+        coffee_btn.set_tooltip_text(_("Support the author"))
+        coffee_btn.set_menu_model(coffee_menu)
         coffee_btn.add_css_class("flat")
         header.pack_end(coffee_btn)
 
@@ -262,7 +271,10 @@ class EditorWindow(Gtk.ApplicationWindow):
         menu.append_section(None, view_section)
         help_section = Gio.Menu()
         help_section.append(_("Keyboard Shortcuts"), "win.shortcuts")
-        help_section.append(_("☕ Buy me a coffee"), "app.support")
+        support_submenu = Gio.Menu()
+        support_submenu.append_item(self._support_menu_item(_("Ko-fi"), "https://ko-fi.com/aprus"))
+        support_submenu.append_item(self._support_menu_item(_("buycoffee.to"), "https://buycoffee.to/aprus"))
+        help_section.append_submenu(_("☕ Support the author"), support_submenu)
         help_section.append(_("About Apedi"), "app.about")
         menu.append_section(None, help_section)
 

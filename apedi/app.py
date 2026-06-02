@@ -59,7 +59,7 @@ class EditorApp(Gtk.Application):
         about.connect("activate", self._on_about)
         self.add_action(about)
 
-        support = Gio.SimpleAction.new("support", None)
+        support = Gio.SimpleAction.new("support", GLib.VariantType.new("s"))
         support.connect("activate", self._on_support)
         self.add_action(support)
 
@@ -93,14 +93,15 @@ class EditorApp(Gtk.Application):
         if win is not None:
             about.present(win)
 
-    def _on_support(self, *_: object) -> None:
+    def _on_support(self, _action: Gio.SimpleAction, param: GLib.Variant) -> None:
+        uri = param.get_string() if param else "https://ko-fi.com/aprus"
         win = self.get_active_window()
         try:
-            launcher = Gtk.UriLauncher.new("https://buycoffee.to/aprus")
+            launcher = Gtk.UriLauncher.new(uri)
             launcher.launch(win, None, None, None)
         except Exception:
             log.exception("UriLauncher failed; falling back to Gio.AppInfo")
-            Gio.AppInfo.launch_default_for_uri("https://buycoffee.to/aprus", None)
+            Gio.AppInfo.launch_default_for_uri(uri, None)
 
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         options = command_line.get_options_dict().end().unpack()

@@ -39,6 +39,12 @@ _CSS = b"""
 .sidebar-compact listview > row > * { padding-top: 0; padding-bottom: 0; }
 .sidebar-compact label { font-size: 0.92em; }
 .sidebar-compact image { -gtk-icon-size: 14px; }
+
+/* About dialog: drop the underline from credit-section links */
+aboutdialog button.link,
+aboutdialog button.link:hover,
+aboutdialog button.link:active,
+aboutdialog button.link:focus { text-decoration: none; }
 """
 
 

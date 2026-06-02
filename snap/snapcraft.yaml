@@ -29,10 +29,10 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.8'
-icon: data/pl.aprus.apedi.svg
+version: '0.7.9'
+icon: data/apedi-icon.png
 contact: aprus@codesty.pl
-donation: https://buycoffee.to/aprus
+donation: https://ko-fi.com/aprus
 
 apps:
   apedi:
@@ -133,14 +133,21 @@ parts:
   desktop-data:
     plugin: dump
     source: data/
+    build-packages: [imagemagick]
+    override-build: |
+      craftctl default
+      # Pad PNG (478x494) to 512x512 with transparent border for hicolor
+      mkdir -p "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/512x512/apps"
+      convert apedi-icon.png -background transparent -gravity center \
+        -extent 512x512 \
+        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/512x512/apps/pl.aprus.apedi.png"
     organize:
       pl.aprus.apedi.desktop: usr/share/applications/pl.aprus.apedi.desktop
-      pl.aprus.apedi.svg: usr/share/icons/hicolor/scalable/apps/pl.aprus.apedi.svg
       pl.aprus.apedi.metainfo.xml: usr/share/metainfo/pl.aprus.apedi.metainfo.xml
       snippets/apedi.snippets: usr/share/apedi/snippets/apedi.snippets
     stage:
       - usr/share/applications/*
-      - usr/share/icons/hicolor/scalable/apps/*
+      - usr/share/icons/hicolor/512x512/apps/*
       - usr/share/metainfo/*
       - usr/share/apedi/snippets/*
 

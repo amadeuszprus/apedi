@@ -3,6 +3,19 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9] - 2026-06-02
+
+### Added
+- Two support providers in the ☕ menu: **Ko-fi** (primary) and
+  buycoffee.to. The headerbar coffee button is now a dropdown; the
+  hamburger menu carries the same submenu; the About dialog lists
+  both links.
+
+### Changed
+- New, more colorful application icon (with wordmark). Replaces the
+  previous flat SVG. Also used as the README hero on GitHub.
+- Snap `donation:` metadata pointed at Ko-fi.
+
 ## [0.7.8] - 2026-06-01
 
 ### Changed

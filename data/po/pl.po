@@ -194,3 +194,25 @@ msgstr "Brak formatera dla {lang_id}"
 
 msgid "No language detected"
 msgstr "Nie wykryto języka"
+
+# About + support menu (added 2026-06-02)
+msgid "Menu"
+msgstr "Menu"
+
+msgid "Keyboard Shortcuts"
+msgstr "Skróty klawiszowe"
+
+msgid "About Apedi"
+msgstr "O Apedi"
+
+msgid "Support"
+msgstr "Wsparcie"
+
+msgid "☕ Support the author"
+msgstr "☕ Wesprzyj autora"
+
+msgid "Support the author"
+msgstr "Wesprzyj autora"
+
+msgid "Released under the MIT License. See the LICENSE file shipped with Apedi for the full text."
+msgstr "Wydane na licencji MIT. Pełen tekst licencji znajdziesz w pliku LICENSE dołączonym do Apedi."

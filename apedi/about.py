@@ -20,14 +20,21 @@ def present(parent: Gtk.Window) -> None:
     dialog.set_program_name("Apedi")
     dialog.set_version(__version__)
     dialog.set_comments(_("A fast, simple text editor with syntax highlighting and code formatting"))
-    dialog.set_copyright("© 2026 aprus")
-    dialog.set_license_type(Gtk.License.MIT_X11)
-    dialog.set_authors(["aprus"])
+    dialog.set_copyright("© 2026 Amadeusz Prus (aprus)")
+    dialog.set_license(_(
+        "Released under the MIT License. See the LICENSE file shipped with "
+        "Apedi for the full text."
+    ))
+    dialog.set_wrap_license(True)
+    dialog.set_authors(["Amadeusz Prus (aprus)"])
     dialog.set_logo_icon_name("pl.aprus.apedi")
     dialog.set_transient_for(parent)
     dialog.set_modal(True)
     dialog.add_credit_section(
         _("Support"),
-        ["☕  Buy me a coffee  https://buycoffee.to/aprus"],
+        [
+            "☕  Ko-fi  https://ko-fi.com/aprus",
+            "☕  buycoffee.to  https://buycoffee.to/aprus",
+        ],
     )
     dialog.present()
