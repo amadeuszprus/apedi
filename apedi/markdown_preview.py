@@ -24,6 +24,8 @@ import logging
 from html import escape as _html_escape
 from html.parser import HTMLParser
 from pathlib import Path
+from dataclasses import dataclass
+from enum import Enum
 from typing import Callable
 
 if not hasattr(builtins, "_"):
@@ -72,6 +74,39 @@ def is_markdown_path(path: Path | None) -> bool:
     if path is None:
         return False
     return path.suffix.lower() in MD_EXTENSIONS
+
+
+# ---------- Block model ----------
+
+
+class Align(Enum):
+    LEFT = "left"
+    CENTER = "center"
+    RIGHT = "right"
+
+
+@dataclass(frozen=True)
+class ProseBlock:
+    """Headings, paragraphs, lists, blockquotes — rendered as Pango markup."""
+    pango_markup: str
+
+
+@dataclass(frozen=True)
+class TableBlock:
+    """Table with per-cell Pango markup and per-column alignment."""
+    header: list[str]
+    rows: list[list[str]]
+    aligns: list[Align]
+
+
+@dataclass(frozen=True)
+class CodeBlock:
+    """Fenced code block — raw text, no markup. `lang` preserved for future use."""
+    text: str
+    lang: str | None
+
+
+Block = ProseBlock | TableBlock | CodeBlock
 
 
 # ---------- HTML → Pango converter ----------
@@ -266,6 +301,17 @@ def render_pango(text: str, dark: bool) -> str:
     builder.feed(html)
     builder.close()
     return builder.result()
+
+
+def render_blocks(text: str) -> list[Block]:
+    """Pure markdown → list of block descriptors. Headless-testable."""
+    if not _ensure_md():
+        return [ProseBlock(_("python-markdown not installed"))]
+    builder = _PangoBuilder(dark=False)
+    builder.feed(_html_escape(text, quote=False))
+    builder.close()
+    markup = builder.result()
+    return [ProseBlock(markup)]
 
 
 if GTK_AVAILABLE:
