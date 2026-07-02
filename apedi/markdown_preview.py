@@ -492,6 +492,98 @@ def _render_pango(text: str, dark: bool) -> str:
 
 if GTK_AVAILABLE:
 
+    class _BlockRenderer:
+        """Maps Block dataclasses to fresh GTK widgets."""
+
+        def __init__(
+            self,
+            on_activate_link: Callable[["Gtk.Label", str], bool],
+        ) -> None:
+            self._on_activate_link = on_activate_link
+
+        def build(self, block: Block) -> "Gtk.Widget":
+            if isinstance(block, ProseBlock):
+                return self._build_prose(block)
+            if isinstance(block, TableBlock):
+                return self._build_table(block)
+            if isinstance(block, CodeBlock):
+                return self._build_code(block)
+            raise TypeError(f"Unknown block type: {type(block).__name__}")
+
+        def _build_prose(self, block: ProseBlock) -> "Gtk.Label":
+            label = Gtk.Label()
+            label.set_use_markup(True)
+            label.set_selectable(True)
+            label.set_wrap(True)
+            label.set_wrap_mode(2)  # PANGO_WRAP_WORD_CHAR
+            label.set_xalign(0.0)
+            label.set_yalign(0.0)
+            label.set_valign(Gtk.Align.START)
+            label.set_halign(Gtk.Align.FILL)
+            label.set_markup(block.pango_markup)
+            label.connect("activate-link", self._on_activate_link)
+            return label
+
+        def _build_table(self, block: TableBlock) -> "Gtk.Widget":
+            frame = Gtk.Frame()
+            frame.add_css_class("apedi-md-table")
+            grid = Gtk.Grid()
+            grid.set_column_homogeneous(False)
+
+            xalign_for = {
+                Align.LEFT: 0.0,
+                Align.CENTER: 0.5,
+                Align.RIGHT: 1.0,
+            }
+
+            for col, cell_markup in enumerate(block.header):
+                lbl = self._cell_label(cell_markup, xalign_for[block.aligns[col]])
+                lbl.add_css_class("header")
+                grid.attach(lbl, col, 0, 1, 1)
+
+            for row_idx, row in enumerate(block.rows):
+                zebra = "odd" if row_idx % 2 else "even"
+                for col, cell_markup in enumerate(row):
+                    align = block.aligns[col] if col < len(block.aligns) else Align.LEFT
+                    lbl = self._cell_label(cell_markup, xalign_for[align])
+                    lbl.add_css_class(zebra)
+                    grid.attach(lbl, col, row_idx + 1, 1, 1)
+
+            frame.set_child(grid)
+            return frame
+
+        def _cell_label(self, markup: str, xalign: float) -> "Gtk.Label":
+            lbl = Gtk.Label()
+            lbl.set_use_markup(True)
+            lbl.set_selectable(True)
+            lbl.set_wrap(True)
+            lbl.set_wrap_mode(2)
+            lbl.set_xalign(xalign)
+            lbl.set_yalign(0.0)
+            lbl.set_valign(Gtk.Align.START)
+            lbl.set_hexpand(True)
+            lbl.set_markup(markup)
+            lbl.connect("activate-link", self._on_activate_link)
+            return lbl
+
+        def _build_code(self, block: CodeBlock) -> "Gtk.Widget":
+            frame = Gtk.Frame()
+            frame.add_css_class("apedi-md-code")
+            scroller = Gtk.ScrolledWindow()
+            scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+            scroller.set_hexpand(True)
+            label = Gtk.Label()
+            label.set_text(block.text)
+            label.set_xalign(0.0)
+            label.set_yalign(0.0)
+            label.set_valign(Gtk.Align.START)
+            label.set_halign(Gtk.Align.START)
+            label.set_selectable(True)
+            label.set_wrap(False)
+            scroller.set_child(label)
+            frame.set_child(scroller)
+            return frame
+
     class MarkdownPreview(Gtk.ScrolledWindow):
         """A pane that renders markdown into a Pango-formatted GtkLabel.
 
