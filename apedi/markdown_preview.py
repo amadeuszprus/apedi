@@ -373,16 +373,17 @@ class _BlockSplitter(HTMLParser):
         if tag == "thead":
             self._in_thead = False
         elif tag in ("th", "td"):
-            assert self._current_cell is not None
+            if self._current_cell is None or self._current_row is None:
+                return
             cell_markup = self._current_cell.result().strip()
-            assert self._current_row is not None
             self._current_row.append(cell_markup)
             if self._in_thead:
                 # Only header rows contribute to align inference
                 self._table_aligns.append(self._current_cell_align)
             self._current_cell = None
         elif tag == "tr":
-            assert self._current_row is not None
+            if self._current_row is None:
+                return
             if self._in_thead and self._table_header is None:
                 self._table_header = self._current_row
             else:
