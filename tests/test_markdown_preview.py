@@ -278,8 +278,9 @@ def test_nested_lists_indent() -> None:
 
 
 def test_style_contains_new_selectors() -> None:
-    # Style module must expose the CSS bytes for the preview to consume.
-    from apedi import style
-    css = style._CSS.decode("utf-8")
-    assert ".apedi-md-table" in css
-    assert ".apedi-md-code" in css
+    # Verify the CSS bytes are present without importing the module,
+    # since `apedi.style` requires GObject-Introspection at import time.
+    style_path = Path(__file__).parent.parent / "apedi" / "style.py"
+    src = style_path.read_text(encoding="utf-8")
+    assert ".apedi-md-table" in src
+    assert ".apedi-md-code" in src
