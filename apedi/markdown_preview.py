@@ -307,11 +307,14 @@ def render_blocks(text: str) -> list[Block]:
     """Pure markdown → list of block descriptors. Headless-testable."""
     if not _ensure_md():
         return [ProseBlock(_("python-markdown not installed"))]
+    html = _md.Markdown(
+        extensions=["fenced_code", "tables", "sane_lists"],
+    ).convert(text)
     builder = _PangoBuilder(dark=False)
-    builder.feed(_html_escape(text, quote=False))
+    builder.feed(html)
     builder.close()
     markup = builder.result()
-    return [ProseBlock(markup)]
+    return [ProseBlock(markup)] if markup else []
 
 
 if GTK_AVAILABLE:

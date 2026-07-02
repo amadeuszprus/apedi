@@ -52,3 +52,76 @@ def test_render_blocks_returns_list() -> None:
     assert len(blocks) == 1
     assert isinstance(blocks[0], mp.ProseBlock)
     assert "hi" in blocks[0].pango_markup
+
+
+@pytestmark_md
+def test_render_heading_present() -> None:
+    blocks = mp.render_blocks("# Title\n\n## Sub")
+    assert len(blocks) == 1
+    m = blocks[0].pango_markup
+    assert '<span size="xx-large" weight="bold">' in m
+    assert "Title" in m
+    assert '<span size="x-large" weight="bold">' in m
+    assert "Sub" in m
+
+
+@pytestmark_md
+def test_render_bullet_list() -> None:
+    blocks = mp.render_blocks("- a\n- b\n- c\n")
+    m = blocks[0].pango_markup
+    assert m.count("• ") == 3
+    assert "a" in m and "b" in m and "c" in m
+
+
+@pytestmark_md
+def test_render_ordered_list() -> None:
+    blocks = mp.render_blocks("1. one\n2. two\n")
+    m = blocks[0].pango_markup
+    assert "1. " in m and "2. " in m and "two" in m
+
+
+@pytestmark_md
+def test_render_inline_bold_and_code() -> None:
+    m = mp.render_blocks("This is **bold** and `code`.")[0].pango_markup
+    assert "<b>bold</b>" in m
+    assert 'font_family="monospace"' in m
+
+
+@pytestmark_md
+def test_render_link() -> None:
+    m = mp.render_blocks("[here](https://example.com)")[0].pango_markup
+    assert '<a href="https://example.com">' in m
+    assert "here</a>" in m
+
+
+@pytestmark_md
+def test_render_mailto() -> None:
+    m = mp.render_blocks("[mail](mailto:foo@bar.com)")[0].pango_markup
+    assert '<a href="mailto:foo@bar.com">' in m
+
+
+@pytestmark_md
+def test_render_image_placeholder() -> None:
+    m = mp.render_blocks("![alt](path/to/pic.png)")[0].pango_markup
+    assert "[🖼" in m
+    assert "pic.png" in m
+    assert '<a href="path/to/pic.png">' in m
+
+
+@pytestmark_md
+def test_render_hr() -> None:
+    m = mp.render_blocks("hi\n\n---\n\nbye\n")[0].pango_markup
+    assert "─" * 60 in m
+
+
+@pytestmark_md
+def test_render_blockquote() -> None:
+    m = mp.render_blocks("> quoted\n")[0].pango_markup
+    assert "│ " in m
+    assert "<i>" in m
+
+
+@pytestmark_md
+def test_render_strips_outer_whitespace() -> None:
+    m = mp.render_blocks("hi")[0].pango_markup
+    assert m == m.strip()
