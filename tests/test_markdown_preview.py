@@ -125,3 +125,9 @@ def test_render_blockquote() -> None:
 def test_render_strips_outer_whitespace() -> None:
     m = mp.render_blocks("hi")[0].pango_markup
     assert m == m.strip()
+
+
+@pytestmark_md
+def test_render_empty_input_returns_empty_list() -> None:
+    assert mp.render_blocks("") == []
+    assert mp.render_blocks("   \n  \n") == []
