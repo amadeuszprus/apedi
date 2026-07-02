@@ -176,3 +176,32 @@ def test_table_short_row_padded() -> None:
     tb = mp.render_blocks(src)[0]
     assert len(tb.rows[0]) == 3
     assert tb.rows[0][2] == ""
+
+
+@pytestmark_md
+def test_render_splits_prose_and_code() -> None:
+    src = "before\n\n```python\ndef f():\n    return 1\n```\n\nafter\n"
+    blocks = mp.render_blocks(src)
+    types = [type(b).__name__ for b in blocks]
+    assert types == ["ProseBlock", "CodeBlock", "ProseBlock"]
+    cb = blocks[1]
+    assert cb.lang == "python"
+    assert cb.text == "def f():\n    return 1"
+
+
+@pytestmark_md
+def test_code_block_lang_none_when_absent() -> None:
+    src = "```\nplain\ntext\n```\n"
+    blocks = mp.render_blocks(src)
+    assert isinstance(blocks[0], mp.CodeBlock)
+    assert blocks[0].lang is None
+    assert blocks[0].text == "plain\ntext"
+
+
+@pytestmark_md
+def test_inline_code_stays_in_prose() -> None:
+    # Inline `code` is not a fenced block — must remain in ProseBlock.
+    blocks = mp.render_blocks("this is `inline` code")
+    assert len(blocks) == 1
+    assert isinstance(blocks[0], mp.ProseBlock)
+    assert 'font_family="monospace"' in blocks[0].pango_markup
