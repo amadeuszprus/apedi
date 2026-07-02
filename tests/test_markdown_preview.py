@@ -152,3 +152,27 @@ def test_render_table_alone() -> None:
     tb = blocks[0]
     assert tb.header == ["a", "b"]
     assert tb.rows == [["1", "2"], ["3", "4"]]
+
+
+@pytestmark_md
+def test_table_alignment_from_colons() -> None:
+    src = "| a | b | c |\n|:--|:-:|--:|\n| 1 | 2 | 3 |\n"
+    tb = mp.render_blocks(src)[0]
+    assert tb.aligns == [mp.Align.LEFT, mp.Align.CENTER, mp.Align.RIGHT]
+
+
+@pytestmark_md
+def test_table_cell_preserves_inline_markup() -> None:
+    src = "| a | b |\n| - | - |\n| **hi** | `x` |\n"
+    tb = mp.render_blocks(src)[0]
+    assert "<b>hi</b>" in tb.rows[0][0]
+    assert 'font_family="monospace"' in tb.rows[0][1]
+
+
+@pytestmark_md
+def test_table_short_row_padded() -> None:
+    # Malformed table: header has 3, row has 2 — pad to header width.
+    src = "| a | b | c |\n| - | - | - |\n| 1 | 2 |\n"
+    tb = mp.render_blocks(src)[0]
+    assert len(tb.rows[0]) == 3
+    assert tb.rows[0][2] == ""
