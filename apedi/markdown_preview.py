@@ -477,19 +477,6 @@ def render_blocks(text: str) -> list[Block]:
     return splitter.finalize()
 
 
-def _render_pango(text: str, dark: bool) -> str:
-    """Internal: markdown → Pango markup string, used by MarkdownPreview widget."""
-    if not _ensure_md():
-        return _("python-markdown not installed")
-    html = _md.Markdown(
-        extensions=["fenced_code", "tables", "nl2br", "sane_lists"],
-    ).convert(text)
-    builder = _PangoBuilder(dark=dark)
-    builder.feed(html)
-    builder.close()
-    return builder.result()
-
-
 if GTK_AVAILABLE:
 
     class _BlockRenderer:
@@ -585,11 +572,11 @@ if GTK_AVAILABLE:
             return frame
 
     class MarkdownPreview(Gtk.ScrolledWindow):
-        """A pane that renders markdown into a Pango-formatted GtkLabel.
+        """A pane that renders markdown as a vertical stack of per-block widgets.
 
         Updates are debounced (~250 ms) so live typing stays responsive.
-        Links use Pango's `<a href>` and the label's `activate-link` signal
-        for navigation.
+        Prose blocks are Pango-rendered GtkLabels; tables are GtkGrids with
+        CSS borders/header/zebra; code blocks are bordered rectangles.
         """
 
         __gtype_name__ = "ApediMarkdownPreview"
@@ -599,40 +586,36 @@ if GTK_AVAILABLE:
             self.set_hexpand(True)
             self.set_vexpand(True)
             self.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            self._dark: bool = False
+            self._dark: bool = False  # kept for API compatibility; unused
             self._pending_text: str = ""
             self._pending_base: Path | None = None
             self._timer_id: int | None = None
             self._last_rendered_text: str | None = None
             self.on_open_path: Callable[[Path], None] | None = None
 
-            self._label = Gtk.Label()
-            self._label.set_use_markup(True)
-            self._label.set_selectable(True)
-            self._label.set_wrap(True)
-            self._label.set_wrap_mode(2)  # PANGO_WRAP_WORD_CHAR (= 2)
-            self._label.set_xalign(0.0)
-            self._label.set_yalign(0.0)
-            self._label.set_valign(Gtk.Align.START)
-            self._label.set_halign(Gtk.Align.FILL)
-            self._label.set_margin_start(20)
-            self._label.set_margin_end(20)
-            self._label.set_margin_top(16)
-            self._label.set_margin_bottom(16)
-            self._label.connect("activate-link", self._on_activate_link)
+            self._box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            self._box.set_hexpand(True)
+            self._box.set_vexpand(False)
+            self._box.set_valign(Gtk.Align.START)
+            self._box.set_halign(Gtk.Align.FILL)
+            self._box.set_margin_start(20)
+            self._box.set_margin_end(20)
+            self._box.set_margin_top(16)
+            self._box.set_margin_bottom(16)
+
+            self._renderer = _BlockRenderer(on_activate_link=self._on_activate_link)
 
             if not AVAILABLE:
-                self._label.set_text(
-                    _("Markdown preview unavailable (python-markdown missing)")
-                )
-            self.set_child(self._label)
+                fallback = Gtk.Label()
+                fallback.set_text(_("Markdown preview unavailable (python-markdown missing)"))
+                fallback.set_xalign(0.0)
+                self._box.append(fallback)
+
+            self.set_child(self._box)
 
         def set_dark(self, is_dark: bool) -> None:
-            if self._dark == is_dark:
-                return
+            # Colors use alpha(currentColor,...) so no per-mode render needed.
             self._dark = is_dark
-            if self._last_rendered_text is not None:
-                self._render_now(self._last_rendered_text, self._pending_base)
 
         def update(self, text: str, base_path: Path | None) -> None:
             """Schedule a debounced render of `text`."""
@@ -659,24 +642,40 @@ if GTK_AVAILABLE:
             return False
 
         def _render_now(self, text: str, base_path: Path | None) -> None:
-            # First-render path: python-markdown hasn't been imported yet,
-            # which costs ~50 ms. Show a placeholder, defer the actual
-            # render to the next idle tick so the pane appears instantly.
+            # First-render path: python-markdown hasn't been imported yet
+            # (~50 ms cost). Show a placeholder, defer real render to idle.
             if MARKDOWN_AVAILABLE and _md is None:
-                self._label.set_markup(f"<i>{_html_escape(_('Loading preview…'), quote=False)}</i>")
+                self._show_placeholder(_("Loading preview…"))
                 GLib.idle_add(self._render_after_load, text, base_path)
                 return
-            markup = _render_pango(text, self._dark)
-            self._label.set_markup(markup)
+            self._render_blocks(text)
             self._last_rendered_text = text
 
         def _render_after_load(self, text: str, base_path: Path | None) -> bool:
-            markup = _render_pango(text, self._dark)
-            self._label.set_markup(markup)
+            self._render_blocks(text)
             self._last_rendered_text = text
             return False
 
-        def _on_activate_link(self, _label: Gtk.Label, uri: str) -> bool:
+        def _render_blocks(self, text: str) -> None:
+            self._clear_box()
+            for block in render_blocks(text):
+                self._box.append(self._renderer.build(block))
+
+        def _clear_box(self) -> None:
+            child = self._box.get_first_child()
+            while child is not None:
+                nxt = child.get_next_sibling()
+                self._box.remove(child)
+                child = nxt
+
+        def _show_placeholder(self, msg: str) -> None:
+            self._clear_box()
+            label = Gtk.Label()
+            label.set_markup(f"<i>{_html_escape(msg, quote=False)}</i>")
+            label.set_xalign(0.0)
+            self._box.append(label)
+
+        def _on_activate_link(self, _label: "Gtk.Label", uri: str) -> bool:
             if not uri:
                 return True
             if uri.startswith(("http://", "https://")):
@@ -692,7 +691,6 @@ if GTK_AVAILABLE:
                 except GLib.Error:
                     log.debug("mailto launch failed for %s", uri)
                 return True
-            # Relative or file:// — resolve against base_path and open in editor
             if uri.startswith("file://"):
                 local = Path(uri[len("file://"):].split("#", 1)[0])
             else:
