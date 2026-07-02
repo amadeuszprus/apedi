@@ -141,6 +141,8 @@ class _PangoBuilder(HTMLParser):
         self._code_bg = "#808080"
         self._code_bg_alpha = "10000"  # ~15% of 65535
         self._quote_fg = "#999999"
+        self._heading_char_count: int | None = None  # non-None while inside h1/h2
+        self._heading_underline_char: str | None = None
 
     # ---- helpers ----
 
@@ -156,6 +158,12 @@ class _PangoBuilder(HTMLParser):
         attrs_d = dict(attrs)
         if tag in _HEADING_SPANS:
             self._emit(_HEADING_SPANS[tag])
+            if tag == "h1":
+                self._heading_char_count = 0
+                self._heading_underline_char = "━"
+            elif tag == "h2":
+                self._heading_char_count = 0
+                self._heading_underline_char = "─"
         elif tag in ("strong", "b"):
             self._emit("<b>")
         elif tag in ("em", "i"):
@@ -201,7 +209,13 @@ class _PangoBuilder(HTMLParser):
 
     def handle_endtag(self, tag) -> None:
         if tag in _HEADING_SPANS:
-            self._emit("</span>\n\n")
+            self._emit("</span>\n")
+            if tag in ("h1", "h2") and self._heading_char_count is not None:
+                width = self._heading_char_count + 4
+                self._emit(self._heading_underline_char * width + "\n")
+                self._heading_char_count = None
+                self._heading_underline_char = None
+            self._emit("\n")
         elif tag in ("strong", "b"):
             self._emit("</b>")
         elif tag in ("em", "i"):
@@ -230,6 +244,8 @@ class _PangoBuilder(HTMLParser):
     def handle_data(self, data) -> None:
         if not data:
             return
+        if self._heading_char_count is not None:
+            self._heading_char_count += len(data)
         if self.in_pre:
             # Preserve whitespace including leading indent
             self._emit(_html_escape(data, quote=False))

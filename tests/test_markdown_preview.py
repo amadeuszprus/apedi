@@ -205,3 +205,23 @@ def test_inline_code_stays_in_prose() -> None:
     assert len(blocks) == 1
     assert isinstance(blocks[0], mp.ProseBlock)
     assert 'font_family="monospace"' in blocks[0].pango_markup
+
+
+@pytestmark_md
+def test_heading_underline_h1() -> None:
+    m = mp.render_blocks("# Title")[0].pango_markup
+    assert "━" in m
+
+
+@pytestmark_md
+def test_heading_underline_h2() -> None:
+    m = mp.render_blocks("## Sub")[0].pango_markup
+    assert "─" in m
+
+
+@pytestmark_md
+def test_heading_no_underline_h3() -> None:
+    m = mp.render_blocks("### Small")[0].pango_markup
+    assert "━" not in m
+    # The hr uses '─' × 60 — but h3 alone (no hr) must not have '─'.
+    assert "─" not in m
