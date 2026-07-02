@@ -3,6 +3,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.10] - 2026-07-01
+
+### Improved
+
+- Markdown preview: real tables (bordered `GtkGrid` with header/zebra/alignment)
+- Markdown preview: code blocks render as full-width bordered rectangles
+- Markdown preview: task lists render as `☑` / `☐`
+- Markdown preview: `h1` / `h2` headings get an underline for visual hierarchy
+- Markdown preview: nested blockquotes show one prefix bar per depth level
+- Markdown preview: refactored to a block-level renderer — HTML → dataclass Blocks → per-block widgets
+
 ## [0.7.9] - 2026-06-02
 
 ### Added

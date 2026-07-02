@@ -29,8 +29,8 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.9'
-icon: data/apedi-icon.png
+version: '0.7.10'
+icon: data/apedi-icon-smaller2.png
 contact: aprus@codesty.pl
 donation: https://ko-fi.com/aprus
 
@@ -136,9 +136,9 @@ parts:
     build-packages: [imagemagick]
     override-build: |
       craftctl default
-      # Pad PNG (478x494) to 512x512 with transparent border for hicolor
+      # Pad PNG (249x249) to 512x512 with transparent border for hicolor
       mkdir -p "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/512x512/apps"
-      convert apedi-icon.png -background transparent -gravity center \
+      convert apedi-icon-smaller2.png -background transparent -gravity center \
         -extent 512x512 \
         "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/512x512/apps/pl.aprus.apedi.png"
     organize:
