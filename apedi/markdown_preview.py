@@ -7,7 +7,7 @@ Public surface (kept stable from the WebKit-era implementation):
 - `is_markdown_path(path)` — extension check, no GTK needed.
 - `MARKDOWN_AVAILABLE` — True iff python-markdown is importable.
 - `AVAILABLE` — True iff both GTK is available and python-markdown is too.
-- `render_pango(text, dark)` — pure function, headless-testable.
+- `render_blocks(text)` — pure function, headless-testable.
 - `MarkdownPreview` widget (Gtk.ScrolledWindow):
     `update(text, base_path)`, `flush()`, `set_dark(is_dark)`,
     `on_open_path: Callable[[Path], None] | None`.
@@ -130,28 +130,22 @@ class _PangoBuilder(HTMLParser):
     aligned by widest cell. Images become clickable text placeholders.
     """
 
-    def __init__(self, dark: bool) -> None:
+    def __init__(self, dark: bool, cell_mode: bool = False) -> None:
         super().__init__(convert_charrefs=True)
         self.out: list[str] = []
         self.list_stack: list[tuple[str, int]] = []  # (kind, counter)
         self.in_pre = False
+        self.cell_mode = cell_mode
         # Mid-gray with low alpha so code blocks read well on both light
         # and dark themes — no need to swap colors per theme.
         self._code_bg = "#808080"
         self._code_bg_alpha = "10000"  # ~15% of 65535
         self._quote_fg = "#999999"
-        # Table buffering
-        self._table_rows: list[list[str]] | None = None
-        self._table_row: list[str] | None = None
-        self._table_cell: list[str] | None = None
 
     # ---- helpers ----
 
     def _emit(self, s: str) -> None:
-        if self._table_cell is not None:
-            self._table_cell.append(s)
-        else:
-            self.out.append(s)
+        self.out.append(s)
 
     def _emit_text(self, s: str) -> None:
         self._emit(_html_escape(s, quote=False))
@@ -201,15 +195,7 @@ class _PangoBuilder(HTMLParser):
                 f'<a href="{_html_escape(src, quote=True)}">'
                 f'[🖼 {_html_escape(name, quote=False)}]</a>'
             )
-        elif tag == "table":
-            self._table_rows = []
-        elif tag == "tr":
-            if self._table_rows is not None:
-                self._table_row = []
-        elif tag in ("th", "td"):
-            if self._table_row is not None:
-                self._table_cell = []
-        # p, tbody, thead, etc. — handled by data flow
+        # p, table, tbody, thead, etc. — handled by data flow or _BlockSplitter
 
     # ---- end tags ----
 
@@ -227,7 +213,8 @@ class _PangoBuilder(HTMLParser):
             self.in_pre = False
             self._emit("</span>\n")
         elif tag == "p":
-            self._emit("\n\n")
+            if not self.cell_mode:
+                self._emit("\n\n")
         elif tag == "a":
             self._emit("</a>")
         elif tag in ("ul", "ol"):
@@ -237,37 +224,6 @@ class _PangoBuilder(HTMLParser):
                 self._emit("\n")
         elif tag == "blockquote":
             self._emit("</span></i>\n")
-        elif tag in ("th", "td"):
-            if self._table_row is not None and self._table_cell is not None:
-                self._table_row.append("".join(self._table_cell).strip())
-                self._table_cell = None
-        elif tag == "tr":
-            if self._table_rows is not None and self._table_row is not None:
-                self._table_rows.append(self._table_row)
-                self._table_row = None
-        elif tag == "table":
-            self._flush_table()
-
-    def _flush_table(self) -> None:
-        rows = self._table_rows or []
-        self._table_rows = None
-        if not rows:
-            return
-        widths: list[int] = []
-        for row in rows:
-            for i, cell in enumerate(row):
-                if i >= len(widths):
-                    widths.append(0)
-                widths[i] = max(widths[i], len(cell))
-        lines = []
-        for row in rows:
-            padded = "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(row))
-            lines.append(padded.rstrip())
-        block = "\n".join(lines)
-        self.out.append(
-            f'\n<span background="{self._code_bg}" background_alpha="{self._code_bg_alpha}" font_family="monospace">'
-            f'{_html_escape(block, quote=False)}</span>\n\n'
-        )
 
     # ---- text ----
 
@@ -290,17 +246,179 @@ class _PangoBuilder(HTMLParser):
         return text
 
 
-def render_pango(text: str, dark: bool) -> str:
-    """Pure markdown→Pango markup. Headless-testable (no GTK needed)."""
-    if not _ensure_md():
-        return _("python-markdown not installed")
-    html = _md.Markdown(
-        extensions=["fenced_code", "tables", "nl2br", "sane_lists"],
-    ).convert(text)
-    builder = _PangoBuilder(dark=dark)
-    builder.feed(html)
-    builder.close()
-    return builder.result()
+class _BlockSplitter(HTMLParser):
+    """Walks markdown's HTML output, splitting into Blocks.
+
+    Prose accumulates into a running _PangoBuilder; a <table> or
+    <pre><code> boundary flushes it and emits a dedicated Block.
+    """
+
+    _TABLE_STRUCT = {"thead", "tbody", "tr", "th", "td"}
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.blocks: list[Block] = []
+        self._prose = _PangoBuilder(dark=False)
+        # Table state
+        self._in_table = False
+        self._table_header: list[str] | None = None
+        self._table_rows: list[list[str]] = []
+        self._table_aligns: list[Align] = []
+        self._in_thead = False
+        self._current_row: list[str] | None = None
+        self._current_cell: _PangoBuilder | None = None
+        self._current_cell_align: Align = Align.LEFT
+        # Code state
+        self._in_pre_code = False
+        self._code_lang: str | None = None
+        self._code_chunks: list[str] = []
+
+    # ---- helpers ----
+
+    def _flush_prose(self) -> None:
+        markup = self._prose.result().strip()
+        if markup:
+            self.blocks.append(ProseBlock(markup))
+        self._prose = _PangoBuilder(dark=False)
+
+    @staticmethod
+    def _parse_align(style: str) -> Align:
+        s = style.lower()
+        if "right" in s:
+            return Align.RIGHT
+        if "center" in s:
+            return Align.CENTER
+        return Align.LEFT
+
+    @staticmethod
+    def _parse_lang(class_attr: str) -> str | None:
+        # python-markdown emits class="language-python" for fenced code.
+        for cls in class_attr.split():
+            if cls.startswith("language-"):
+                return cls[len("language-"):]
+        return None
+
+    # ---- HTMLParser hooks ----
+
+    def handle_starttag(self, tag, attrs) -> None:
+        attrs_d = dict(attrs)
+        if tag == "table":
+            self._flush_prose()
+            self._in_table = True
+            self._table_header = None
+            self._table_rows = []
+            self._table_aligns = []
+            return
+        if self._in_table:
+            if tag in self._TABLE_STRUCT:
+                self._handle_table_start(tag, attrs_d)
+            elif self._current_cell is not None:
+                # Inline tags inside a cell (<strong>, <em>, <a>, <code>, ...)
+                # must be routed into the cell's PangoBuilder so inline markup
+                # survives inside table cells.
+                self._current_cell.handle_starttag(tag, attrs)
+            return
+        if tag == "pre":
+            self._flush_prose()
+            self._in_pre_code = True
+            self._code_lang = None
+            self._code_chunks = []
+            return
+        if self._in_pre_code:
+            if tag == "code":
+                self._code_lang = self._parse_lang(attrs_d.get("class", "") or "")
+            return
+        # Prose
+        self._prose.handle_starttag(tag, attrs)
+
+    def handle_endtag(self, tag) -> None:
+        if self._in_table:
+            if tag == "table" or tag in self._TABLE_STRUCT:
+                self._handle_table_end(tag)
+            elif self._current_cell is not None:
+                self._current_cell.handle_endtag(tag)
+            return
+        if self._in_pre_code:
+            if tag == "pre":
+                self._emit_code_block()
+                self._in_pre_code = False
+            return
+        self._prose.handle_endtag(tag)
+
+    def handle_data(self, data) -> None:
+        if self._in_table:
+            if self._current_cell is not None:
+                self._current_cell.handle_data(data)
+            return
+        if self._in_pre_code:
+            self._code_chunks.append(data)
+            return
+        self._prose.handle_data(data)
+
+    # ---- table sub-handlers ----
+
+    def _handle_table_start(self, tag, attrs_d) -> None:
+        if tag == "thead":
+            self._in_thead = True
+        elif tag == "tr":
+            self._current_row = []
+        elif tag in ("th", "td"):
+            style = attrs_d.get("style", "") or ""
+            self._current_cell_align = self._parse_align(style)
+            self._current_cell = _PangoBuilder(dark=False, cell_mode=True)
+        elif tag == "tbody":
+            pass  # ignored — presence/absence handled by thead flag
+
+    def _handle_table_end(self, tag) -> None:
+        if tag == "thead":
+            self._in_thead = False
+        elif tag in ("th", "td"):
+            assert self._current_cell is not None
+            cell_markup = self._current_cell.result().strip()
+            assert self._current_row is not None
+            self._current_row.append(cell_markup)
+            if self._in_thead:
+                # Only header rows contribute to align inference
+                self._table_aligns.append(self._current_cell_align)
+            self._current_cell = None
+        elif tag == "tr":
+            assert self._current_row is not None
+            if self._in_thead and self._table_header is None:
+                self._table_header = self._current_row
+            else:
+                self._table_rows.append(self._current_row)
+            self._current_row = None
+        elif tag == "table":
+            header = self._table_header or []
+            # Normalize aligns to header width
+            aligns = self._table_aligns[: len(header)]
+            while len(aligns) < len(header):
+                aligns.append(Align.LEFT)
+            # Pad short rows so downstream can iterate without bounds checks
+            width = len(header)
+            rows = [row + [""] * (width - len(row)) for row in self._table_rows]
+            self.blocks.append(TableBlock(header=header, rows=rows, aligns=aligns))
+            self._in_table = False
+
+    # ---- code emit ----
+
+    def _emit_code_block(self) -> None:
+        text = "".join(self._code_chunks)
+        # python-markdown wraps code in <pre><code>...</code></pre> without
+        # a trailing newline; some fenced blocks arrive with a leading newline.
+        if text.startswith("\n"):
+            text = text[1:]
+        if text.endswith("\n"):
+            text = text[:-1]
+        self.blocks.append(CodeBlock(text=text, lang=self._code_lang))
+        self._code_chunks = []
+        self._code_lang = None
+
+    # ---- finalize ----
+
+    def finalize(self) -> list[Block]:
+        self._flush_prose()
+        return self.blocks
 
 
 def render_blocks(text: str) -> list[Block]:
@@ -310,11 +428,23 @@ def render_blocks(text: str) -> list[Block]:
     html = _md.Markdown(
         extensions=["fenced_code", "tables", "sane_lists"],
     ).convert(text)
-    builder = _PangoBuilder(dark=False)
+    splitter = _BlockSplitter()
+    splitter.feed(html)
+    splitter.close()
+    return splitter.finalize()
+
+
+def _render_pango(text: str, dark: bool) -> str:
+    """Internal: markdown → Pango markup string, used by MarkdownPreview widget."""
+    if not _ensure_md():
+        return _("python-markdown not installed")
+    html = _md.Markdown(
+        extensions=["fenced_code", "tables", "nl2br", "sane_lists"],
+    ).convert(text)
+    builder = _PangoBuilder(dark=dark)
     builder.feed(html)
     builder.close()
-    markup = builder.result()
-    return [ProseBlock(markup)] if markup else []
+    return builder.result()
 
 
 if GTK_AVAILABLE:
@@ -401,12 +531,12 @@ if GTK_AVAILABLE:
                 self._label.set_markup(f"<i>{_html_escape(_('Loading preview…'), quote=False)}</i>")
                 GLib.idle_add(self._render_after_load, text, base_path)
                 return
-            markup = render_pango(text, self._dark)
+            markup = _render_pango(text, self._dark)
             self._label.set_markup(markup)
             self._last_rendered_text = text
 
         def _render_after_load(self, text: str, base_path: Path | None) -> bool:
-            markup = render_pango(text, self._dark)
+            markup = _render_pango(text, self._dark)
             self._label.set_markup(markup)
             self._last_rendered_text = text
             return False

@@ -131,3 +131,24 @@ def test_render_strips_outer_whitespace() -> None:
 def test_render_empty_input_returns_empty_list() -> None:
     assert mp.render_blocks("") == []
     assert mp.render_blocks("   \n  \n") == []
+
+
+@pytestmark_md
+def test_render_splits_prose_and_table() -> None:
+    src = "before\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nafter\n"
+    blocks = mp.render_blocks(src)
+    types = [type(b).__name__ for b in blocks]
+    assert types == ["ProseBlock", "TableBlock", "ProseBlock"]
+    tb = blocks[1]
+    assert tb.header == ["a", "b"]
+    assert tb.rows == [["1", "2"]]
+
+
+@pytestmark_md
+def test_render_table_alone() -> None:
+    src = "| a | b |\n| - | - |\n| 1 | 2 |\n| 3 | 4 |\n"
+    blocks = mp.render_blocks(src)
+    assert [type(b).__name__ for b in blocks] == ["TableBlock"]
+    tb = blocks[0]
+    assert tb.header == ["a", "b"]
+    assert tb.rows == [["1", "2"], ["3", "4"]]
