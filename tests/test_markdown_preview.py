@@ -225,3 +225,30 @@ def test_heading_no_underline_h3() -> None:
     assert "━" not in m
     # The hr uses '─' × 60 — but h3 alone (no hr) must not have '─'.
     assert "─" not in m
+
+
+@pytestmark_md
+def test_task_list_checked() -> None:
+    m = mp.render_blocks("- [x] done\n")[0].pango_markup
+    assert "☑ done" in m
+
+
+@pytestmark_md
+def test_task_list_unchecked() -> None:
+    m = mp.render_blocks("- [ ] todo\n")[0].pango_markup
+    assert "☐ todo" in m
+
+
+@pytestmark_md
+def test_task_list_mixed() -> None:
+    m = mp.render_blocks("- [x] a\n- [ ] b\n")[0].pango_markup
+    assert "☑ a" in m
+    assert "☐ b" in m
+
+
+@pytestmark_md
+def test_bullet_list_unchanged_by_task_extension() -> None:
+    m = mp.render_blocks("- a\n- b\n- c\n")[0].pango_markup
+    assert m.count("• ") == 3
+    assert "☐" not in m
+    assert "☑" not in m

@@ -21,6 +21,7 @@ from __future__ import annotations
 import builtins
 import importlib.util as _importlib_util
 import logging
+import re
 from html import escape as _html_escape
 from html.parser import HTMLParser
 from pathlib import Path
@@ -130,6 +131,8 @@ class _PangoBuilder(HTMLParser):
     aligned by widest cell. Images become clickable text placeholders.
     """
 
+    _TASK_RE = re.compile(r"^\[( |x|X)\]\s+")
+
     def __init__(self, dark: bool, cell_mode: bool = False) -> None:
         super().__init__(convert_charrefs=True)
         self.out: list[str] = []
@@ -143,6 +146,7 @@ class _PangoBuilder(HTMLParser):
         self._quote_fg = "#999999"
         self._heading_char_count: int | None = None  # non-None while inside h1/h2
         self._heading_underline_char: str | None = None
+        self._li_pending_task: bool = False
 
     # ---- helpers ----
 
@@ -155,6 +159,9 @@ class _PangoBuilder(HTMLParser):
     # ---- start tags ----
 
     def handle_starttag(self, tag, attrs) -> None:
+        if self._li_pending_task and tag != "li":
+            self._emit("• ")
+            self._li_pending_task = False
         attrs_d = dict(attrs)
         if tag in _HEADING_SPANS:
             self._emit(_HEADING_SPANS[tag])
@@ -193,7 +200,8 @@ class _PangoBuilder(HTMLParser):
                 self.list_stack[-1] = (kind, count)
                 self._emit(f"\n{indent}{count}. ")
             else:
-                self._emit(f"\n{indent}• ")
+                self._emit(f"\n{indent}")  # bullet chosen after peeking at content
+                self._li_pending_task = True
         elif tag == "blockquote":
             self._emit(f'\n<i><span foreground="{self._quote_fg}">│ ')
         elif tag == "img":
@@ -208,6 +216,9 @@ class _PangoBuilder(HTMLParser):
     # ---- end tags ----
 
     def handle_endtag(self, tag) -> None:
+        if self._li_pending_task:
+            self._emit("• ")
+            self._li_pending_task = False
         if tag in _HEADING_SPANS:
             self._emit("</span>\n")
             if tag in ("h1", "h2") and self._heading_char_count is not None:
@@ -244,6 +255,17 @@ class _PangoBuilder(HTMLParser):
     def handle_data(self, data) -> None:
         if not data:
             return
+        if self._li_pending_task:
+            self._li_pending_task = False
+            match = self._TASK_RE.match(data)
+            if match:
+                marker = "☑ " if match.group(1) in ("x", "X") else "☐ "
+                self._emit(marker)
+                data = data[match.end():]
+                if not data:
+                    return
+            else:
+                self._emit("• ")
         if self._heading_char_count is not None:
             self._heading_char_count += len(data)
         if self.in_pre:
