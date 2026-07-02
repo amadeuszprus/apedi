@@ -265,3 +265,13 @@ def test_single_blockquote_still_single_bar() -> None:
     m = mp.render_blocks("> shallow\n")[0].pango_markup
     assert "│ " in m
     assert "│ │ " not in m
+
+
+@pytestmark_md
+def test_nested_lists_indent() -> None:
+    src = "- a\n    - b\n        - c\n"
+    m = mp.render_blocks(src)[0].pango_markup
+    # Level 0 has no indent prefix; level 1 has "  "; level 2 has "    ".
+    assert "\n• a" in m or m.startswith("• a")
+    assert "\n  • b" in m
+    assert "\n    • c" in m
