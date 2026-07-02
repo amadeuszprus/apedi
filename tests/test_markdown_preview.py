@@ -275,3 +275,11 @@ def test_nested_lists_indent() -> None:
     assert "\n• a" in m or m.startswith("• a")
     assert "\n  • b" in m
     assert "\n    • c" in m
+
+
+def test_style_contains_new_selectors() -> None:
+    # Style module must expose the CSS bytes for the preview to consume.
+    from apedi import style
+    css = style._CSS.decode("utf-8")
+    assert ".apedi-md-table" in css
+    assert ".apedi-md-code" in css

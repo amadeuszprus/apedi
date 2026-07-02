@@ -45,6 +45,39 @@ aboutdialog button.link,
 aboutdialog button.link:hover,
 aboutdialog button.link:active,
 aboutdialog button.link:focus { text-decoration: none; }
+
+/* Markdown preview - tables */
+frame.apedi-md-table {
+    border: 1px solid alpha(currentColor, 0.15);
+    border-radius: 6px;
+    margin: 8px 0;
+}
+.apedi-md-table > grid > label {
+    padding: 6px 12px;
+    background: transparent;
+}
+.apedi-md-table > grid > label.header {
+    font-weight: bold;
+    background: alpha(currentColor, 0.06);
+    border-bottom: 1px solid alpha(currentColor, 0.15);
+}
+.apedi-md-table > grid > label.odd {
+    background: alpha(currentColor, 0.03);
+}
+
+/* Markdown preview - code blocks */
+frame.apedi-md-code {
+    background: alpha(currentColor, 0.06);
+    border: 1px solid alpha(currentColor, 0.10);
+    border-radius: 6px;
+    margin: 8px 0;
+}
+.apedi-md-code > * {
+    padding: 10px 14px;
+}
+.apedi-md-code label {
+    font-family: monospace;
+}
 """
 
 
