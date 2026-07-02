@@ -147,6 +147,7 @@ class _PangoBuilder(HTMLParser):
         self._heading_char_count: int | None = None  # non-None while inside h1/h2
         self._heading_underline_char: str | None = None
         self._li_pending_task: bool = False
+        self._quote_depth: int = 0
 
     # ---- helpers ----
 
@@ -203,7 +204,9 @@ class _PangoBuilder(HTMLParser):
                 self._emit(f"\n{indent}")  # bullet chosen after peeking at content
                 self._li_pending_task = True
         elif tag == "blockquote":
-            self._emit(f'\n<i><span foreground="{self._quote_fg}">│ ')
+            self._quote_depth += 1
+            prefix = "│ " * self._quote_depth
+            self._emit(f'\n<i><span foreground="{self._quote_fg}">{prefix}')
         elif tag == "img":
             src = attrs_d.get("src", "") or ""
             name = src.rsplit("/", 1)[-1] or src or "image"
@@ -249,6 +252,7 @@ class _PangoBuilder(HTMLParser):
                 self._emit("\n")
         elif tag == "blockquote":
             self._emit("</span></i>\n")
+            self._quote_depth = max(0, self._quote_depth - 1)
 
     # ---- text ----
 

@@ -252,3 +252,16 @@ def test_bullet_list_unchanged_by_task_extension() -> None:
     assert m.count("• ") == 3
     assert "☐" not in m
     assert "☑" not in m
+
+
+@pytestmark_md
+def test_nested_blockquote_double_bar() -> None:
+    m = mp.render_blocks("> > deep\n")[0].pango_markup
+    assert "│ │ " in m
+
+
+@pytestmark_md
+def test_single_blockquote_still_single_bar() -> None:
+    m = mp.render_blocks("> shallow\n")[0].pango_markup
+    assert "│ " in m
+    assert "│ │ " not in m
