@@ -23,7 +23,9 @@
       <li>Auto / light / dark theme; localized UI (English, Polski)</li>
     </ul>
   </description>
-  <launchable type="desktop-id">pl.aprus.apedi.desktop</launchable>  <developer_name>aprus</developer_name>
+  <launchable type="desktop-id">pl.aprus.apedi.desktop</launchable>
+  <icon type="stock">pl.aprus.apedi</icon>
+  <developer_name>aprus</developer_name>
   <provides>
     <binary>apedi</binary>
   </provides>
@@ -32,7 +34,35 @@
     <category>Utility</category>
     <category>TextEditor</category>
   </categories>
-  <content_rating type="oars-1.1"/>  <releases>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.7.9" date="2026-06-02">
+      <description><p>New, more colorful application icon. Ko-fi and buycoffee.to support links in the ☕ menu and About dialog.</p></description>
+    </release>
+    <release version="0.7.8" date="2026-06-01">
+      <description><p>Startup performance: snap install shrinks from ~1.1 GB to ~580 MB, faster cold launches, WebKit removed in favor of Pango-based markdown preview, lazier imports, fast <code>apedi --version</code>.</p></description>
+    </release>
+    <release version="0.7.7" date="2026-05-14">
+      <description><p>Markdown preview: split-view live rendering for .md files with theme-aware styling, <code>Ctrl+Shift+M</code> toggle, auto-open switch in Preferences.</p></description>
+    </release>
+    <release version="0.7.6" date="2026-05-10">
+      <description><p>Find/Replace in Files is now modal and centered. Pre-fills the search input from the current selection.</p></description>
+    </release>
+    <release version="0.7.5" date="2026-05-10">
+      <description><p>Fix New File… / New Folder… crash in the sidebar context menu (gettext alias shadowed by <code>*_</code> parameter). Input prompt window centered as a proper dialog.</p></description>
+    </release>
+    <release version="0.7.4" date="2026-05-10">
+      <description><p>Fix sidebar right-click menu items doing nothing — replaced <code>PopoverMenu</code> + <code>Gio.Menu</code> with a plain <code>Popover</code> so actions fire.</p></description>
+    </release>
+    <release version="0.7.3" date="2026-05-09">
+      <description><p>Sidebar collapse button, multiple terminals, sidebar right-click context menu (New File / New Folder / Find / Replace / Replace with), Replace in Files mode, new keyboard shortcuts.</p></description>
+    </release>
+    <release version="0.7.2" date="2026-05-07">
+      <description><p>What's New dialog renders CHANGELOG bold, <code>##</code> headings and Markdown bullet lists properly.</p></description>
+    </release>
+    <release version="0.7.1" date="2026-05-07">
+      <description><p>Header bar reshuffled with a ☕ button on the right. Keyboard Shortcuts window (<code>Ctrl+?</code>). Compact sidebar now the default. Quick Open / Find in Files fall back to open-tab folders when no project is loaded. Terminal picks the user's zsh correctly.</p></description>
+    </release>
     <release version="0.7.0" date="2026-05-07">
       <description><p>Quick Open, Find in Files, integrated About, snippets, crash recovery, file watcher, expanded keyboard cheat-sheet.</p></description>
     </release>
