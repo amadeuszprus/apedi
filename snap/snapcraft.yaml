@@ -133,7 +133,7 @@ parts:
   desktop-data:
     plugin: dump
     source: data/
-    build-packages: [imagemagick]
+    build-packages: [imagemagick-6.q16]
     override-build: |
       craftctl default
       # Pad PNG (249x249) to 512x512 with transparent border for hicolor
