@@ -131,6 +131,7 @@ class FindInFilesDialog(Gtk.Window):
         with_replace: bool = False,
         scope_label: str | None = None,
         initial_query: str = "",
+        all_projects: list[Path] | None = None,
     ) -> None:
         title = _("Replace in Files") if with_replace else _("Find in Files")
         super().__init__(
@@ -144,6 +145,13 @@ class FindInFilesDialog(Gtk.Window):
         self.extra_patterns = extra_patterns
         self.on_chosen = on_chosen
         self.with_replace = with_replace
+        # Project switcher is only shown when the caller passes the full project
+        # list AND there is no forced scope (right-click "search this folder"
+        # uses scope_label and shouldn't override the user's explicit target).
+        show_project_switcher = (
+            all_projects is not None and len(all_projects) > 1 and not scope_label
+        )
+        self._all_projects: list[Path] = list(all_projects) if all_projects else []
 
         key_ctrl = Gtk.EventControllerKey()
         key_ctrl.connect("key-pressed", self._on_key_pressed)
@@ -159,6 +167,26 @@ class FindInFilesDialog(Gtk.Window):
             scope.add_css_class("dim-label")
             scope.set_text(_("Scope: {label}").format(label=scope_label))
             outer.append(scope)
+
+        if show_project_switcher:
+            scope_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            scope_row.append(Gtk.Label(label=_("In:"), xalign=0))
+            labels = [_("All open projects")]
+            labels.extend(p.name or str(p) for p in self._all_projects)
+            self.project_dropdown = Gtk.DropDown.new_from_strings(labels)
+            self.project_dropdown.set_hexpand(True)
+            initial_index = 0
+            if len(projects) == 1:
+                try:
+                    initial_index = self._all_projects.index(projects[0]) + 1
+                except ValueError:
+                    initial_index = 0
+            self.project_dropdown.set_selected(initial_index)
+            self.project_dropdown.connect("notify::selected", self._on_project_changed)
+            scope_row.append(self.project_dropdown)
+            outer.append(scope_row)
+        else:
+            self.project_dropdown = None
 
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         self.entry = Gtk.SearchEntry()
@@ -232,6 +260,15 @@ class FindInFilesDialog(Gtk.Window):
             self.close()
             return True
         return False
+
+    def _on_project_changed(self, dropdown: Gtk.DropDown, _pspec: object) -> None:
+        idx = dropdown.get_selected()
+        if idx == 0:
+            self.projects = list(self._all_projects)
+        else:
+            self.projects = [self._all_projects[idx - 1]]
+        if self.entry.get_text():
+            self._run()
 
     def focus_replace_entry(self) -> None:
         if self.replace_entry is not None:

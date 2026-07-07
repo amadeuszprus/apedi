@@ -20,6 +20,9 @@ def manager() -> GtkSource.LanguageManager:
     return _manager
 
 
+_HTML_FALLBACK_SUFFIXES = {".vue", ".svelte"}
+
+
 def language_for_path(path: Path | None, content: str | None = None) -> GtkSource.Language | None:
     """Guess language by filename + content type. Returns None when unknown."""
     if path is None:
@@ -30,7 +33,12 @@ def language_for_path(path: Path | None, content: str | None = None) -> GtkSourc
         sample = content[:4096].encode("utf-8", errors="replace")
         guessed_type, _ = Gio.content_type_guess(filename, sample)
         content_type = guessed_type
-    return manager().guess_language(filename, content_type)
+    lang = manager().guess_language(filename, content_type)
+    if lang is None and path.suffix.lower() in _HTML_FALLBACK_SUFFIXES:
+        # GtkSourceView 5 has no vue/svelte lang defs. Both are HTML-like SFCs
+        # (template + embedded <script>/<style>), so HTML highlighting works.
+        lang = manager().get_language("html")
+    return lang
 
 
 def language_id_for_path(path: Path | None, content: str | None = None) -> str | None:

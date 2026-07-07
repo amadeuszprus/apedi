@@ -24,7 +24,7 @@
     </ul>
   </description>
   <launchable type="desktop-id">pl.aprus.apedi.desktop</launchable>
-  <icon type="stock">pl.aprus.apedi</icon>
+  <icon type="local">/usr/share/icons/hicolor/512x512/apps/pl.aprus.apedi.png</icon>
   <developer_name>aprus</developer_name>
   <provides>
     <binary>apedi</binary>
@@ -36,6 +36,15 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.12" date="2026-07-07">
+      <description><p>Vue and Svelte files get syntax highlighting (HTML fallback). Find in Files has a new project switcher (defaults to the sidebar-selected project). AppStream icon reference switched to <code>type="local"</code> so Ubuntu Software / GNOME Software can resolve it.</p></description>
+    </release>
+    <release version="0.7.11" date="2026-07-07">
+      <description><p>Snap ships app icons at all standard hicolor sizes so Ubuntu Software / GNOME Software can display them; the store icon is now a proper 512x512.</p></description>
+    </release>
+    <release version="0.7.10" date="2026-07-01">
+      <description><p>Markdown preview: real tables (bordered GtkGrid with header, zebra, alignment), code blocks as full-width bordered rectangles, task lists rendered as <code>☑</code> / <code>☐</code>, <code>h1</code>/<code>h2</code> get an underline, nested blockquotes show one prefix bar per depth. Renderer refactored to a block-level pipeline: HTML → dataclass Blocks → per-block widgets.</p></description>
+    </release>
     <release version="0.7.9" date="2026-06-02">
       <description><p>New, more colorful application icon. Ko-fi and buycoffee.to support links in the ☕ menu and About dialog.</p></description>
     </release>

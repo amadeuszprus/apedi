@@ -3,6 +3,35 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.12] - 2026-07-07
+
+### Added
+- **Vue / Svelte syntax highlighting.** GtkSourceView 5 has no
+  language definitions for these; opening a `.vue` or `.svelte`
+  file now falls back to the HTML highlighter, which correctly
+  colors the template plus embedded `<script>` and `<style>`
+  blocks.
+- **Find in Files project switcher** (`Ctrl+Shift+F`). New "In:"
+  dropdown lets you scope the search to a single open project.
+  Default = the project selected in the sidebar (or containing the
+  currently selected file). "All open projects" keeps the previous
+  behavior.
+
+### Changed
+- AppStream metainfo `<icon>` uses `type="local"` with the full
+  in-snap path instead of `type="stock"`. snapd does not respect
+  the hicolor icon theme spec inside a snap, so a stock reference
+  never resolved for Ubuntu Software / GNOME Software.
+
+## [0.7.11] - 2026-07-07
+
+### Changed
+- Snap ships the app icon at all standard hicolor sizes (48, 64, 128,
+  256, 512) instead of just 512x512, and the store icon is now a
+  proper 512x512 PNG. Ubuntu Software / GNOME Software previously
+  rejected the 249x249 store icon as an unrecognized size and fell
+  back to the generic placeholder.
+
 ## [0.7.10] - 2026-07-01
 
 ### Improved

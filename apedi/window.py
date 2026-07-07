@@ -1227,10 +1227,19 @@ class EditorWindow(Gtk.ApplicationWindow):
         from .find_in_files import FindInFilesDialog
 
         self._init_deferred()
-        projects = self.sidebar.projects() or self._fallback_search_roots()
-        if not projects:
+        all_projects = self.sidebar.projects() or self._fallback_search_roots()
+        if not all_projects:
             self._set_status(_("Find in Files needs an open project or an open file"))
             return
+
+        initial_projects: list[Path] = list(all_projects)
+        context = self.sidebar.get_context_path()
+        if context is not None:
+            proj = self.sidebar.project_for(context)
+            if proj is None and context in all_projects:
+                proj = context
+            if proj is not None:
+                initial_projects = [proj]
 
         def on_chosen(path: Path, line: int) -> None:
             self.open_path(path)
@@ -1242,8 +1251,9 @@ class EditorWindow(Gtk.ApplicationWindow):
                 tab.view.grab_focus()
 
         FindInFilesDialog(
-            self, projects, list(self.settings.ignore_patterns), on_chosen,
+            self, initial_projects, list(self.settings.ignore_patterns), on_chosen,
             initial_query=self._selected_text(),
+            all_projects=list(all_projects),
         ).present()
 
     def action_symbols(self, *_args: object) -> None:

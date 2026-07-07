@@ -29,8 +29,8 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.10'
-icon: data/apedi-icon-smaller2.png
+version: '0.7.12'
+icon: data/apedi-icon-512.png
 contact: aprus@codesty.pl
 donation: https://ko-fi.com/aprus
 
@@ -136,18 +136,23 @@ parts:
     build-packages: [imagemagick-6.q16]
     override-build: |
       craftctl default
-      # Pad PNG (249x249) to 512x512 with transparent border for hicolor
-      mkdir -p "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/512x512/apps"
-      convert apedi-icon-smaller2.png -background transparent -gravity center \
-        -extent 512x512 \
-        "$CRAFT_PART_INSTALL/usr/share/icons/hicolor/512x512/apps/pl.aprus.apedi.png"
+      # Emit hicolor icons at all standard AppStream / freedesktop sizes so
+      # gnome-software / snap-store can pick one that matches its display DPI.
+      # Snap Store previously refused to cache a single 249x249 icon (not a
+      # standard size).
+      for size in 48 64 128 256 512; do
+        dir="$CRAFT_PART_INSTALL/usr/share/icons/hicolor/${size}x${size}/apps"
+        mkdir -p "$dir"
+        convert apedi-icon-512.png -filter Lanczos -resize ${size}x${size} \
+          "$dir/pl.aprus.apedi.png"
+      done
     organize:
       pl.aprus.apedi.desktop: usr/share/applications/pl.aprus.apedi.desktop
       pl.aprus.apedi.metainfo.xml: usr/share/metainfo/pl.aprus.apedi.metainfo.xml
       snippets/apedi.snippets: usr/share/apedi/snippets/apedi.snippets
     stage:
       - usr/share/applications/*
-      - usr/share/icons/hicolor/512x512/apps/*
+      - usr/share/icons/hicolor/*/apps/*
       - usr/share/metainfo/*
       - usr/share/apedi/snippets/*
 
