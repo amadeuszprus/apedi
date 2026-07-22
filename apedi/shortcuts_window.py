@@ -42,6 +42,7 @@ def present(parent: Gtk.Window) -> None:
     _add(nav_group, "<Primary>Tab",           _("Next tab"))
     _add(nav_group, "<Primary><Shift>Tab",    _("Previous tab"))
     _add(nav_group, "<Primary>p",             _("Quick Open file"))
+    _add(nav_group, "<Primary><Shift>p",      _("Command Palette"))
     _add(nav_group, "<Primary>m",             _("Go to symbol in file"))
     _add(nav_group, "<Primary>g",             _("Go to line"))
     section.add_group(nav_group)
@@ -73,4 +74,5 @@ def present(parent: Gtk.Window) -> None:
     section.add_group(view_group)
 
     win.add_section(section)
+    win.set_title(_("Keyboard Shortcuts"))
     win.present()

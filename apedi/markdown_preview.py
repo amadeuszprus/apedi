@@ -45,6 +45,69 @@ except (ImportError, ValueError) as _e:
     log.info("Gtk not available — markdown preview disabled: %s", _e)
     Gio = GLib = Gtk = None  # type: ignore[assignment]
 
+# GtkSourceView is used to syntax-highlight fenced code blocks. It's optional:
+# if it can't load, code blocks fall back to a plain monospace label.
+if GTK_AVAILABLE:
+    try:
+        gi.require_version("GtkSource", "5")
+        from gi.repository import GtkSource  # noqa: E402
+        SOURCEVIEW_AVAILABLE = True
+    except (ImportError, ValueError) as _e:  # noqa: F811
+        SOURCEVIEW_AVAILABLE = False
+        GtkSource = None  # type: ignore[assignment]
+        log.info("GtkSource not available — markdown code blocks stay plain: %s", _e)
+else:
+    SOURCEVIEW_AVAILABLE = False
+    GtkSource = None  # type: ignore[assignment]
+
+
+# Map common fenced-code language tags to GtkSourceView language ids.
+_LANG_ALIASES = {
+    "js": "js", "javascript": "js", "jsx": "js", "node": "js",
+    "ts": "typescript", "typescript": "typescript", "tsx": "typescript",
+    "py": "python3", "python": "python3", "python3": "python3",
+    "sh": "sh", "bash": "sh", "shell": "sh", "zsh": "sh", "console": "sh",
+    "yml": "yaml", "yaml": "yaml",
+    "cpp": "cpp", "c++": "cpp", "cxx": "cpp", "cc": "cpp",
+    "cs": "c-sharp", "c#": "c-sharp", "csharp": "c-sharp",
+    "rb": "ruby", "rs": "rust", "kt": "kotlin", "kts": "kotlin",
+    "md": "markdown", "html": "html", "htm": "html", "xml": "xml",
+    "json": "json", "css": "css", "scss": "scss", "go": "go",
+    "golang": "go", "java": "java", "php": "php", "sql": "sql",
+    "toml": "toml", "ini": "ini", "cfg": "ini", "diff": "diff",
+    "patch": "diff", "dockerfile": "docker", "docker": "docker",
+    "make": "makefile", "makefile": "makefile", "vue": "html",
+    "svelte": "html", "tsx-": "typescript",
+}
+
+
+def _resolve_language(lang: str | None):
+    """Best-effort fenced-code tag → GtkSource.Language (or None)."""
+    if not lang or not SOURCEVIEW_AVAILABLE:
+        return None
+    mgr = GtkSource.LanguageManager.get_default()
+    key = lang.strip().lower()
+    lid = _LANG_ALIASES.get(key, key)
+    return mgr.get_language(lid) or mgr.get_language(key)
+
+
+def _code_style_scheme(dark: bool):
+    """Pick a GtkSource style scheme that matches the current UI brightness."""
+    if not SOURCEVIEW_AVAILABLE:
+        return None
+    mgr = GtkSource.StyleSchemeManager.get_default()
+    prefer = (
+        ["Adwaita-dark", "oblivion", "cobalt", "classic-dark"]
+        if dark
+        else ["Adwaita", "classic", "tango", "kate"]
+    )
+    for sid in prefer:
+        scheme = mgr.get_scheme(sid)
+        if scheme is not None:
+            return scheme
+    ids = mgr.get_scheme_ids() or []
+    return mgr.get_scheme(ids[0]) if ids else None
+
 
 MARKDOWN_AVAILABLE = _importlib_util.find_spec("markdown") is not None
 _md = None  # populated by _ensure_md() on first render
@@ -485,8 +548,10 @@ if GTK_AVAILABLE:
         def __init__(
             self,
             on_activate_link: Callable[["Gtk.Label", str], bool],
+            dark: bool = False,
         ) -> None:
             self._on_activate_link = on_activate_link
+            self.dark = dark
 
         def build(self, block: Block) -> "Gtk.Widget":
             if isinstance(block, ProseBlock):
@@ -559,6 +624,34 @@ if GTK_AVAILABLE:
             scroller = Gtk.ScrolledWindow()
             scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
             scroller.set_hexpand(True)
+            scroller.set_child(self._build_code_child(block))
+            frame.set_child(scroller)
+            return frame
+
+        def _build_code_child(self, block: CodeBlock) -> "Gtk.Widget":
+            # Syntax-highlight via a read-only GtkSourceView when available;
+            # otherwise fall back to a plain, unhighlighted monospace label.
+            if SOURCEVIEW_AVAILABLE:
+                buf = GtkSource.Buffer()
+                lang = _resolve_language(block.lang)
+                if lang is not None:
+                    buf.set_language(lang)
+                buf.set_highlight_syntax(lang is not None)
+                scheme = _code_style_scheme(self.dark)
+                if scheme is not None:
+                    buf.set_style_scheme(scheme)
+                buf.set_text(block.text)
+                view = GtkSource.View(buffer=buf)
+                view.set_editable(False)
+                view.set_cursor_visible(False)
+                view.set_monospace(True)
+                view.set_show_line_numbers(False)
+                view.set_left_margin(8)
+                view.set_right_margin(8)
+                view.set_top_margin(6)
+                view.set_bottom_margin(6)
+                view.add_css_class("apedi-md-code-view")
+                return view
             label = Gtk.Label()
             label.set_text(block.text)
             label.set_xalign(0.0)
@@ -567,9 +660,7 @@ if GTK_AVAILABLE:
             label.set_halign(Gtk.Align.START)
             label.set_selectable(True)
             label.set_wrap(False)
-            scroller.set_child(label)
-            frame.set_child(scroller)
-            return frame
+            return label
 
     class MarkdownPreview(Gtk.ScrolledWindow):
         """A pane that renders markdown as a vertical stack of per-block widgets.
@@ -592,6 +683,11 @@ if GTK_AVAILABLE:
             self._timer_id: int | None = None
             self._last_rendered_text: str | None = None
             self.on_open_path: Callable[[Path], None] | None = None
+            # Scroll-preservation across re-renders. `is_rendering` lets an
+            # external scroll-sync ignore the transient value=0 that a rebuild
+            # emits (clearing the box shrinks the adjustment to the top).
+            self.is_rendering: bool = False
+            self._restore_handler_id: int = 0
 
             self._box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
             self._box.set_hexpand(True)
@@ -603,7 +699,9 @@ if GTK_AVAILABLE:
             self._box.set_margin_top(16)
             self._box.set_margin_bottom(16)
 
-            self._renderer = _BlockRenderer(on_activate_link=self._on_activate_link)
+            self._renderer = _BlockRenderer(
+                on_activate_link=self._on_activate_link, dark=self._dark
+            )
 
             if not AVAILABLE:
                 fallback = Gtk.Label()
@@ -614,8 +712,14 @@ if GTK_AVAILABLE:
             self.set_child(self._box)
 
         def set_dark(self, is_dark: bool) -> None:
-            # Colors use alpha(currentColor,...) so no per-mode render needed.
+            # Prose colors use alpha(currentColor,…) so they need no re-render,
+            # but code blocks pick a light/dark GtkSource scheme — re-render
+            # already-shown content so those recolor with the theme.
+            changed = is_dark != self._dark
             self._dark = is_dark
+            self._renderer.dark = is_dark
+            if changed and self._last_rendered_text is not None:
+                self._render_blocks(self._last_rendered_text)
 
         def update(self, text: str, base_path: Path | None) -> None:
             """Schedule a debounced render of `text`."""
@@ -657,9 +761,48 @@ if GTK_AVAILABLE:
             return False
 
         def _render_blocks(self, text: str) -> None:
+            self.is_rendering = True
+            frac = self._capture_fraction()
             self._clear_box()
             for block in render_blocks(text):
                 self._box.append(self._renderer.build(block))
+            self._restore_fraction(frac)
+
+        def _capture_fraction(self) -> float:
+            adj = self.get_vadjustment()
+            if adj is None:
+                return 0.0
+            span = adj.get_upper() - adj.get_page_size()
+            return adj.get_value() / span if span > 0 else 0.0
+
+        def _restore_fraction(self, frac: float) -> None:
+            # The rebuilt box isn't measured until GTK's next layout pass, so
+            # the adjustment's `upper` is still stale here. Re-apply the scroll
+            # fraction on the next "changed" emission (fires once `upper` grows
+            # back), then disconnect. Keeping `is_rendering` True until then
+            # stops the restore from being echoed into a synced source view.
+            adj = self.get_vadjustment()
+            if adj is None:
+                self.is_rendering = False
+                return
+            if self._restore_handler_id:
+                adj.disconnect(self._restore_handler_id)
+                self._restore_handler_id = 0
+            if frac <= 0.0:
+                self.is_rendering = False
+                return
+
+            def _apply(_a: "Gtk.Adjustment") -> None:
+                span = adj.get_upper() - adj.get_page_size()
+                if span <= 0:
+                    return  # box not tall enough yet — wait for the next emit
+                adj.set_value(frac * span)
+                if self._restore_handler_id:
+                    adj.disconnect(self._restore_handler_id)
+                    self._restore_handler_id = 0
+                self.is_rendering = False
+
+            self._restore_handler_id = adj.connect("changed", _apply)
 
         def _clear_box(self) -> None:
             child = self._box.get_first_child()

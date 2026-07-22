@@ -57,6 +57,8 @@ class Settings:
     autosave_delay_ms: int = 2000
     language: str = "auto"  # "auto" | "en" | "pl"
     markdown_preview_auto: bool = True
+    show_minimap: bool = False
+    restore_session: bool = True
 
     @classmethod
     def load(cls, path: Path = CONFIG_PATH) -> "Settings":

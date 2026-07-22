@@ -65,8 +65,16 @@ def resolve_binary(spec: FormatterSpec) -> str | None:
     return shutil.which(spec.binary)
 
 
-def format_text(language_id: str, text: str, filename: str = "stdin") -> str:
-    """Run formatter, return formatted text. Raises FormatError on any failure."""
+def format_text(
+    language_id: str, text: str, filename: str = "stdin", cwd: str | None = None
+) -> str:
+    """Run formatter, return formatted text. Raises FormatError on any failure.
+
+    `cwd` sets the subprocess working directory — pass the edited file's folder
+    so tools like black/prettier discover project config (and read `.gitignore`)
+    under the user's home instead of walking up from an inaccessible directory,
+    which under snap confinement fails with a permission error on `.gitignore`.
+    """
     spec = FORMATTERS.get(language_id)
     if spec is None:
         raise FormatError(f"No formatter for language: {language_id}")
@@ -86,6 +94,7 @@ def format_text(language_id: str, text: str, filename: str = "stdin") -> str:
             text=True,
             timeout=FORMAT_TIMEOUT_S,
             check=False,
+            cwd=cwd,
         )
     except subprocess.TimeoutExpired as e:
         raise FormatError(f"Format timed out after {FORMAT_TIMEOUT_S}s") from e

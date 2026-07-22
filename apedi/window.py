@@ -60,7 +60,15 @@ class EditorTab(Gtk.Paned):
         self._editor_scroll.set_hexpand(True)
         self._editor_scroll.set_vexpand(True)
         self._editor_scroll.set_child(self.view)
-        self.set_start_child(self._editor_scroll)
+        # Minimap sits to the right of the source view inside the paned's
+        # start child; visibility is driven by settings.show_minimap.
+        self._minimap = GtkSource.Map()
+        self._minimap.set_view(self.view)
+        self._minimap.set_vexpand(True)
+        editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        editor_box.append(self._editor_scroll)
+        editor_box.append(self._minimap)
+        self.set_start_child(editor_box)
         self.set_resize_start_child(True)
         self.set_shrink_start_child(False)
         self.set_resize_end_child(True)
@@ -68,6 +76,7 @@ class EditorTab(Gtk.Paned):
         self.preview: "Gtk.Widget | None" = None  # MarkdownPreview when created
         self.preview_visible: bool = False
         self.on_open_path: Callable[[Path], None] | None = None
+        self._sync_guard: bool = False  # re-entrancy guard for scroll sync
         self._apply_settings(settings)
         self.search_settings = GtkSource.SearchSettings()
         self.search_settings.set_wrap_around(True)
@@ -116,6 +125,8 @@ class EditorTab(Gtk.Paned):
         self.view.set_insert_spaces_instead_of_tabs(s.use_spaces)
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR if s.wrap_lines else Gtk.WrapMode.NONE)
         self.view.set_monospace(True)
+        if hasattr(self, "_minimap"):
+            self._minimap.set_visible(s.show_minimap)
         css = Gtk.CssProvider()
         css.load_from_string(
             f"textview {{ font-family: '{s.font}'; font-size: {s.font_size}pt; }}"
@@ -143,7 +154,47 @@ class EditorTab(Gtk.Paned):
             self.preview.on_open_path = self.on_open_path
         self.set_end_child(self.preview)
         self.preview.set_visible(False)
+        self._wire_scroll_sync()
         return self.preview
+
+    def _wire_scroll_sync(self) -> None:
+        """Keep the source view and the preview scrolled to the same fraction."""
+        if self.preview is None:
+            return
+        src_adj = self._editor_scroll.get_vadjustment()
+        prev_adj = self.preview.get_vadjustment()
+        if src_adj is None or prev_adj is None:
+            return
+        src_adj.connect("value-changed", self._sync_from_source)
+        prev_adj.connect("value-changed", self._sync_from_preview)
+
+    @staticmethod
+    def _adj_fraction(adj: "Gtk.Adjustment") -> float:
+        span = adj.get_upper() - adj.get_page_size()
+        return adj.get_value() / span if span > 0 else 0.0
+
+    @staticmethod
+    def _adj_apply_fraction(adj: "Gtk.Adjustment", frac: float) -> None:
+        span = adj.get_upper() - adj.get_page_size()
+        adj.set_value(frac * span if span > 0 else 0.0)
+
+    def _sync_from_source(self, src_adj: "Gtk.Adjustment") -> None:
+        if self._sync_guard or not self.preview_visible or self.preview is None:
+            return
+        self._sync_guard = True
+        self._adj_apply_fraction(self.preview.get_vadjustment(), self._adj_fraction(src_adj))
+        self._sync_guard = False
+
+    def _sync_from_preview(self, prev_adj: "Gtk.Adjustment") -> None:
+        if self._sync_guard or not self.preview_visible or self.preview is None:
+            return
+        # Ignore the churn a re-render emits while rebuilding its widgets —
+        # otherwise typing would yank the source view back to the top.
+        if getattr(self.preview, "is_rendering", False):
+            return
+        self._sync_guard = True
+        self._adj_apply_fraction(self._editor_scroll.get_vadjustment(), self._adj_fraction(prev_adj))
+        self._sync_guard = False
 
     def set_preview_visible(self, visible: bool) -> bool:
         """Show/hide the markdown preview pane. Returns True on success."""
@@ -204,7 +255,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         menu_btn.set_tooltip_text(_("Menu"))
         header.pack_start(menu_btn)
 
-        sidebar_btn = Gtk.Button.new_from_icon_name("view-sidebar-start-symbolic")
+        sidebar_btn = Gtk.Button.new_from_icon_name("sidebar-show-symbolic")
         sidebar_btn.set_action_name("win.toggle-sidebar")
         sidebar_btn.set_tooltip_text(_("Toggle sidebar (F9)"))
         header.pack_start(sidebar_btn)
@@ -241,6 +292,8 @@ class EditorWindow(Gtk.ApplicationWindow):
         header.pack_end(coffee_btn)
 
         menu = Gio.Menu()
+
+        # Top level: the most-used file actions only.
         file_section = Gio.Menu()
         file_section.append(_("New Tab"), "win.new-tab")
         file_section.append(_("New Window"), "win.new-window")
@@ -251,35 +304,56 @@ class EditorWindow(Gtk.ApplicationWindow):
         file_section.append(_("Save"), "win.save")
         file_section.append(_("Save As…"), "win.save-as")
         menu.append_section(None, file_section)
-        edit_section = Gio.Menu()
-        edit_section.append(_("Quick Open…"), "win.quick-open")
-        edit_section.append(_("Find…"), "win.find")
-        edit_section.append(_("Find in Files…"), "win.find-in-files")
-        edit_section.append(_("Replace…"), "win.replace")
-        edit_section.append(_("Go to Line…"), "win.goto-line")
-        edit_section.append(_("Go to Symbol…"), "win.symbols")
-        edit_section.append(_("Format Code"), "win.format")
-        menu.append_section(None, edit_section)
-        view_section = Gio.Menu()
-        view_section.append(_("Toggle Sidebar"), "win.toggle-sidebar")
-        view_section.append(_("Toggle Terminal"), "win.toggle-terminal")
-        view_section.append(_("New Terminal"), "win.new-terminal")
-        view_section.append(_("Toggle Markdown Preview"), "win.toggle-preview")
-        view_section.append(_("Toggle Word Wrap"), "win.toggle-wrap")
-        view_section.append(_("Toggle Line Numbers"), "win.toggle-line-numbers")
-        view_section.append(_("Toggle Dark Mode"), "win.toggle-dark")
-        menu.append_section(None, view_section)
-        help_section = Gio.Menu()
-        help_section.append(_("Keyboard Shortcuts"), "win.shortcuts")
+
+        # The two large command groups fold into submenus so the hamburger
+        # menu stays short instead of scrolling through ~30 flat entries.
+        edit_menu = Gio.Menu()
+        edit_menu.append(_("Command Palette…"), "win.command-palette")
+        edit_menu.append(_("Quick Open…"), "win.quick-open")
+        edit_menu.append(_("Find…"), "win.find")
+        edit_menu.append(_("Find in Files…"), "win.find-in-files")
+        edit_menu.append(_("Replace…"), "win.replace")
+        edit_menu.append(_("Go to Line…"), "win.goto-line")
+        edit_menu.append(_("Go to Symbol…"), "win.symbols")
+        edit_menu.append(_("Format Code"), "win.format")
+
+        view_menu = Gio.Menu()
+        view_menu.append(_("Toggle Sidebar"), "win.toggle-sidebar")
+        view_menu.append(_("Toggle Terminal"), "win.toggle-terminal")
+        view_menu.append(_("New Terminal"), "win.new-terminal")
+        view_menu.append(_("Toggle Markdown Preview"), "win.toggle-preview")
+        view_menu.append(_("Toggle Word Wrap"), "win.toggle-wrap")
+        view_menu.append(_("Toggle Line Numbers"), "win.toggle-line-numbers")
+        view_menu.append(_("Toggle Minimap"), "win.toggle-minimap")
+        view_menu.append(_("Toggle Dark Mode"), "win.toggle-dark")
+
+        groups_section = Gio.Menu()
+        groups_section.append_submenu(_("Edit"), edit_menu)
+        groups_section.append_submenu(_("View"), view_menu)
+        menu.append_section(None, groups_section)
+
+        prefs_section = Gio.Menu()
+        prefs_section.append(_("Preferences…"), "win.preferences")
+        menu.append_section(None, prefs_section)
+
+        # Help collapses into a single submenu (shortcuts / what's new /
+        # support / about).
+        help_menu = Gio.Menu()
+        help_menu.append(_("Keyboard Shortcuts"), "win.shortcuts")
+        help_menu.append(_("What's New"), "app.whats-new")
+        help_menu.append(_("About Apedi"), "app.about")
+
         support_submenu = Gio.Menu()
         support_submenu.append_item(self._support_menu_item(_("Ko-fi"), "https://ko-fi.com/aprus"))
         support_submenu.append_item(self._support_menu_item(_("buycoffee.to"), "https://buycoffee.to/aprus"))
+
+        # Support the author stays at the top level, alongside Help.
+        help_section = Gio.Menu()
+        help_section.append_submenu(_("Help"), help_menu)
         help_section.append_submenu(_("☕ Support the author"), support_submenu)
-        help_section.append(_("About Apedi"), "app.about")
         menu.append_section(None, help_section)
 
         app_section = Gio.Menu()
-        app_section.append(_("Preferences…"), "win.preferences")
         app_section.append(_("Close Tab"), "win.close-tab")
         app_section.append(_("Close Window"), "win.close-window")
         app_section.append(_("Quit"), "app.quit")
@@ -459,7 +533,9 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("format", self.action_format),
             ("toggle-wrap", self.action_toggle_wrap),
             ("toggle-line-numbers", self.action_toggle_line_numbers),
+            ("toggle-minimap", self.action_toggle_minimap),
             ("toggle-dark", self.action_toggle_dark),
+            ("command-palette", self.action_command_palette),
             ("preferences", self.action_preferences),
             ("open-project", self.action_open_project),
             ("toggle-sidebar", self.action_toggle_sidebar),
@@ -862,8 +938,11 @@ class EditorWindow(Gtk.ApplicationWindow):
             return
         text = tab.buffer.get_full_text()
         filename = str(tab.buffer.path) if tab.buffer.path else f"buffer.{lang_id}"
+        work_dir = None
+        if tab.buffer.path is not None and tab.buffer.path.parent.is_dir():
+            work_dir = str(tab.buffer.path.parent)
         try:
-            formatted = formatters.format_text(lang_id, text, filename=filename)
+            formatted = formatters.format_text(lang_id, text, filename=filename, cwd=work_dir)
         except formatters.FormatError as e:
             self._set_status(str(e))
             return
@@ -889,6 +968,16 @@ class EditorWindow(Gtk.ApplicationWindow):
         if tab is None:
             return
         tab.view.set_show_line_numbers(not tab.view.get_show_line_numbers())
+
+    def action_toggle_minimap(self, *_args: object) -> None:
+        self.settings.show_minimap = not self.settings.show_minimap
+        self.settings.save()
+        app = self.get_application()
+        if app is not None and hasattr(app, "broadcast_settings"):
+            app.broadcast_settings(self.settings)
+        else:
+            for tab in self.all_tabs():
+                tab._apply_settings(self.settings)
 
     def action_toggle_dark(self, *_args: object) -> None:
         cycle = ["auto", "light", "dark"]
@@ -1198,6 +1287,62 @@ class EditorWindow(Gtk.ApplicationWindow):
 
         shortcuts_window.present(self)
 
+    # Commands surfaced in the palette: (label, detailed-action-name).
+    _PALETTE_COMMANDS: list[tuple[str, str]] = [
+        (_("New Tab"), "win.new-tab"),
+        (_("New Window"), "win.new-window"),
+        (_("Open File…"), "win.open"),
+        (_("Open Project…"), "win.open-project"),
+        (_("Save"), "win.save"),
+        (_("Save As…"), "win.save-as"),
+        (_("Close Tab"), "win.close-tab"),
+        (_("Quick Open…"), "win.quick-open"),
+        (_("Find…"), "win.find"),
+        (_("Find in Files…"), "win.find-in-files"),
+        (_("Replace…"), "win.replace"),
+        (_("Go to Line…"), "win.goto-line"),
+        (_("Go to Symbol…"), "win.symbols"),
+        (_("Format Code"), "win.format"),
+        (_("Toggle Sidebar"), "win.toggle-sidebar"),
+        (_("Toggle Terminal"), "win.toggle-terminal"),
+        (_("New Terminal"), "win.new-terminal"),
+        (_("Toggle Markdown Preview"), "win.toggle-preview"),
+        (_("Toggle Word Wrap"), "win.toggle-wrap"),
+        (_("Toggle Line Numbers"), "win.toggle-line-numbers"),
+        (_("Toggle Minimap"), "win.toggle-minimap"),
+        (_("Toggle Dark Mode"), "win.toggle-dark"),
+        (_("Preferences…"), "win.preferences"),
+        (_("Keyboard Shortcuts"), "win.shortcuts"),
+        (_("About Apedi"), "app.about"),
+        (_("Quit"), "app.quit"),
+    ]
+
+    def _accel_label_for(self, action_name: str) -> str:
+        app = self.get_application()
+        if app is None:
+            return ""
+        accels = app.get_accels_for_action(action_name)
+        if not accels:
+            return ""
+        ok, keyval, mods = Gtk.accelerator_parse(accels[0])
+        if not ok:
+            return ""
+        return Gtk.accelerator_get_label(keyval, mods)
+
+    def action_command_palette(self, *_args: object) -> None:
+        from .command_palette import CommandPalette
+
+        commands = [
+            (label, action, self._accel_label_for(action))
+            for label, action in self._PALETTE_COMMANDS
+        ]
+
+        def on_chosen(action_name: str) -> None:
+            # activate_action resolves the win./app. prefix through the muxer.
+            self.activate_action(action_name, None)
+
+        CommandPalette(self, commands, on_chosen).present()
+
     def action_quick_open(self, *_args: object) -> None:
         from .quick_open import QuickOpenDialog
 
@@ -1458,14 +1603,40 @@ class EditorWindow(Gtk.ApplicationWindow):
     # ---------- Close request / dirty guard ----------
 
     def _on_close_request(self, _win: Gtk.Window) -> bool:
+        # Snapshot the layout before any tab is torn down by the save prompts.
+        self._pending_session_state = (
+            self._session_state() if self.settings.restore_session else None
+        )
         dirty = [t for t in self.all_tabs() if t.buffer.get_modified()]
         if not dirty:
+            self._remember_session()
             return False
         self._prompt_close_chain(dirty, 0)
         return True  # block close, will re-call destroy when done
 
+    def _session_state(self) -> dict:
+        """Serialize this window's open files + cursor for session restore."""
+        tabs: list[dict] = []
+        for tab in self.all_tabs():
+            path = tab.buffer.path
+            if path is None:
+                continue  # scratch buffers are handled by recovery drafts
+            ins = tab.buffer.get_iter_at_mark(tab.buffer.get_insert())
+            tabs.append({"path": str(path), "cursor": ins.get_offset()})
+        return {"tabs": tabs, "active": self.notebook.get_current_page()}
+
+    def _remember_session(self) -> None:
+        state = getattr(self, "_pending_session_state", None)
+        if state is None:
+            return
+        app = self.get_application()
+        if app is not None and hasattr(app, "remember_window"):
+            app.remember_window(state)
+        self._pending_session_state = None
+
     def _prompt_close_chain(self, tabs: list[EditorTab], idx: int) -> None:
         if idx >= len(tabs):
+            self._remember_session()
             self.destroy()
             return
         tab = tabs[idx]

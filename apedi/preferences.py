@@ -105,6 +105,9 @@ class PreferencesDialog(Gtk.Window):
         self.trim_switch = self._switch(self.settings.trim_trailing_whitespace)
         page.add(_("Trim trailing whitespace on save"), self.trim_switch)
 
+        self.minimap_switch = self._switch(self.settings.show_minimap)
+        page.add(_("Show minimap"), self.minimap_switch)
+
         self.md_preview_switch = self._switch(self.settings.markdown_preview_auto)
         page.add(_("Markdown preview (auto-open for .md)"), self.md_preview_switch)
         return page.grid
@@ -138,6 +141,9 @@ class PreferencesDialog(Gtk.Window):
 
     def _build_system_page(self) -> Gtk.Widget:
         page = _Page()
+        self.restore_session_switch = self._switch(self.settings.restore_session)
+        page.add(_("Restore previous session on startup"), self.restore_session_switch)
+
         self.fm_switch = self._switch(self.settings.register_in_file_manager)
         page.add(_("Show in file manager 'Open with' menu"), self.fm_switch)
 
@@ -234,6 +240,7 @@ class PreferencesDialog(Gtk.Window):
             self.settings.show_line_numbers = self.lineno_switch.get_active()
             self.settings.auto_indent = self.autoindent_switch.get_active()
             self.settings.trim_trailing_whitespace = self.trim_switch.get_active()
+            self.settings.show_minimap = self.minimap_switch.get_active()
             self.settings.markdown_preview_auto = self.md_preview_switch.get_active()
 
             self.settings.show_sidebar = self.sidebar_switch.get_active()
@@ -243,6 +250,7 @@ class PreferencesDialog(Gtk.Window):
                 p.strip() for p in raw.split(",") if p.strip()
             ]
 
+            self.settings.restore_session = self.restore_session_switch.get_active()
             self.settings.register_in_file_manager = self.fm_switch.get_active()
             ai = self.autosave_combo.get_selected()
             if 0 <= ai < len(self._autosave_options):

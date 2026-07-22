@@ -27,6 +27,7 @@ SHORTCUTS: list[tuple[str, list[str]]] = [
     ("win.toggle-preview", ["<Primary><Shift>m"]),
     ("win.symbols", ["<Primary>m"]),
     ("win.quick-open", ["<Primary>p"]),
+    ("win.command-palette", ["<Primary><Shift>p"]),
     ("win.find-in-files", ["<Primary><Shift>f"]),
     ("win.sidebar-new-file", ["<Primary><Alt>n"]),
     ("win.sidebar-new-folder", ["<Primary><Alt><Shift>n"]),

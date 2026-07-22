@@ -30,6 +30,8 @@ class EditorApp(Gtk.Application):
             flags=Gio.ApplicationFlags.HANDLES_OPEN | Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
         )
         self.settings = Settings.load()
+        self._session_windows: list[dict] = []
+        self._session_restored = False
         self.add_main_option(
             "new-window", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
             "Open in a new window", None,
@@ -58,6 +60,10 @@ class EditorApp(Gtk.Application):
         about = Gio.SimpleAction.new("about", None)
         about.connect("activate", self._on_about)
         self.add_action(about)
+
+        whats_new = Gio.SimpleAction.new("whats-new", None)
+        whats_new.connect("activate", self._on_whats_new)
+        self.add_action(whats_new)
 
         support = Gio.SimpleAction.new("support", GLib.VariantType.new("s"))
         support.connect("activate", self._on_support)
@@ -93,6 +99,17 @@ class EditorApp(Gtk.Application):
         if win is not None:
             about.present(win)
 
+    def _on_whats_new(self, *_: object) -> None:
+        from .whatsnew import WhatsNewDialog, section_for_version
+
+        win = self.get_active_window()
+        if win is None:
+            return
+        content = section_for_version(__version__) or _(
+            "No release notes found for this version."
+        )
+        WhatsNewDialog(win, __version__, content).present()
+
     def _on_support(self, _action: Gio.SimpleAction, param: GLib.Variant) -> None:
         uri = param.get_string() if param else "https://ko-fi.com/aprus"
         win = self.get_active_window()
@@ -118,8 +135,10 @@ class EditorApp(Gtk.Application):
         if paths:
             for p in paths:
                 window.open_path(p)
-        elif window.notebook.get_n_pages() == 0:
-            window.add_tab()
+        else:
+            self._maybe_restore_session(window)
+            if window.notebook.get_n_pages() == 0:
+                window.add_tab()
 
         window.present()
         GLib.idle_add(self._maybe_show_whats_new, window)
@@ -127,11 +146,78 @@ class EditorApp(Gtk.Application):
 
     def do_activate(self) -> None:
         win = self.get_active_window() or self.new_window()
+        self._maybe_restore_session(win)
         if win.notebook.get_n_pages() == 0:
             win.add_tab()
         win.present()
         GLib.idle_add(self._maybe_show_whats_new, win)
         GLib.idle_add(self._maybe_restore_drafts, win)
+
+    def remember_window(self, state: dict) -> None:
+        """Called by a window as it closes; persists the running session."""
+        from . import session
+
+        self._session_windows.append(state)
+        if self.settings.restore_session:
+            session.save(self._session_windows)
+
+    def _maybe_restore_session(self, window: EditorWindow) -> None:
+        if self._session_restored:
+            return
+        self._session_restored = True
+        if not self.settings.restore_session:
+            return
+        from . import session
+
+        windows = session.load()
+        if not windows:
+            return
+        # First saved window fills the already-created one; the rest spawn.
+        self._schedule_restore(window, windows[0])
+        for extra in windows[1:]:
+            w = self.new_window()
+            self._schedule_restore(w, extra)
+            w.present()
+
+    def _schedule_restore(self, window: EditorWindow, state: dict) -> None:
+        # Defer to PRIORITY_LOW so the window's own deferred init (which loads
+        # the project sidebar) runs first — otherwise opening a file would
+        # re-derive its project root before the saved projects are back.
+        GLib.idle_add(
+            self._restore_window, window, state, priority=GLib.PRIORITY_LOW
+        )
+
+    def _restore_window(self, window: EditorWindow, state: dict) -> bool:
+        try:
+            for tabinfo in state.get("tabs", []):
+                path = Path(tabinfo.get("path", ""))
+                if not path.is_file():
+                    continue
+                if not window.open_path(path):
+                    continue
+                cursor = tabinfo.get("cursor")
+                tab = window.current_tab()
+                if tab is not None and isinstance(cursor, int):
+                    buf = tab.buffer
+                    n = buf.get_char_count()
+                    it = buf.get_iter_at_offset(max(0, min(cursor, n)))
+                    buf.place_cursor(it)
+                    GLib.idle_add(self._scroll_to_cursor, tab)
+            active = state.get("active", 0)
+            if isinstance(active, int) and 0 <= active < window.notebook.get_n_pages():
+                window.notebook.set_current_page(active)
+        except Exception:
+            log.exception("session restore failed")
+        return False
+
+    @staticmethod
+    def _scroll_to_cursor(tab) -> bool:
+        try:
+            mark = tab.buffer.get_insert()
+            tab.view.scroll_to_mark(mark, 0.2, True, 0.0, 0.3)
+        except Exception:
+            log.debug("scroll to cursor failed", exc_info=True)
+        return False
 
     def _maybe_restore_drafts(self, window: EditorWindow) -> bool:
         try:

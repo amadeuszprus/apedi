@@ -3,6 +3,40 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.13] - 2026-07-22
+
+### Added
+- **Command Palette** (`Ctrl+Shift+P`). Fuzzy runner for every editor
+  command, each row showing its keyboard shortcut. Reuses the Quick
+  Open picker style.
+- **Minimap.** A GtkSourceView code overview to the right of the editor,
+  toggled from Preferences → Editor → *Show minimap*, the View menu, or
+  the Command Palette.
+- **Session restore.** Reopens the previous window/tab layout (files and
+  cursor positions) on startup. Toggle in Preferences → System →
+  *Restore previous session on startup*.
+- **Syntax highlighting inside Markdown preview code blocks.** Fenced
+  code now renders through a read-only GtkSourceView with the fence's
+  language, instead of a plain monospace label.
+- **What's New** is now reachable any time from the menu (Help → What's
+  New), not only on the first launch of a new version.
+
+### Fixed
+- **Markdown preview scroll.** The source view and the preview now scroll
+  together (proportional, bidirectional sync), and the preview no longer
+  jumps back to the top on every keystroke — it keeps its scroll position
+  across re-renders.
+- **Code formatting under snap.** The formatter now runs in the edited
+  file's directory, so `black` / `prettier` read project config and
+  `.gitignore` from your home folder instead of failing with a permission
+  error on `.gitignore`.
+- **Sidebar toggle icon.** Uses `sidebar-show-symbolic`, which exists in
+  the icon theme, instead of the missing `view-sidebar-start-symbolic`
+  that rendered as a broken glyph.
+- **Hamburger menu** reorganized: the large Edit and View command groups
+  and the Help entries now live in submenus, so the top level is short
+  instead of a ~30-item scroll.
+
 ## [0.7.12] - 2026-07-07
 
 ### Added
