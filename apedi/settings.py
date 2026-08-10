@@ -31,6 +31,19 @@ def _dumps(data: dict[str, Any]) -> str:
 CONFIG_DIR = Path.home() / ".config" / "apedi"
 CONFIG_PATH = CONFIG_DIR / "config.toml"
 
+# Keep both panes grabbable — a split dragged fully to an edge would leave
+# no handle to drag back.
+MIN_SPLIT_RATIO = 0.1
+MAX_SPLIT_RATIO = 0.9
+DEFAULT_SPLIT_RATIO = 0.5
+
+
+def clamp_split_ratio(value: Any, default: float = DEFAULT_SPLIT_RATIO) -> float:
+    """Coerce a stored split ratio into a usable fraction of the pane width."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return max(MIN_SPLIT_RATIO, min(MAX_SPLIT_RATIO, float(value)))
+
 
 @dataclass
 class Settings:
@@ -57,6 +70,7 @@ class Settings:
     autosave_delay_ms: int = 2000
     language: str = "auto"  # "auto" | "en" | "pl"
     markdown_preview_auto: bool = True
+    markdown_split_ratio: float = DEFAULT_SPLIT_RATIO
     show_minimap: bool = False
     restore_session: bool = True
 

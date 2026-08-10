@@ -18,11 +18,15 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("GtkSource", "5")
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk, GtkSource  # noqa: E402
 
-from . import file_io, recent
+from . import file_io, recent, theming
 from .buffer import EditorBuffer
-from .settings import Settings
+from .settings import Settings, clamp_split_ratio
 
 log = logging.getLogger(__name__)
+
+# Debounce for persisting a dragged markdown split — the handle emits a
+# position change per pixel, and each save rewrites config.toml.
+SPLIT_SAVE_DELAY_MS = 500
 
 
 def _likely_snap_confinement_block(path: Path) -> bool:
@@ -77,6 +81,12 @@ class EditorTab(Gtk.Paned):
         self.preview_visible: bool = False
         self.on_open_path: Callable[[Path], None] | None = None
         self._sync_guard: bool = False  # re-entrancy guard for scroll sync
+        self._split_ratio: float = clamp_split_ratio(settings.markdown_split_ratio)
+        self._split_pending: bool = False  # waiting for a real allocation
+        self._split_applied_width: int = 0  # width the position was computed for
+        self._allocating: bool = False  # inside do_size_allocate
+        self.on_split_ratio_changed: Callable[[float], None] | None = None
+        self.connect("notify::position", self._on_split_position_changed)
         self._apply_settings(settings)
         self.search_settings = GtkSource.SearchSettings()
         self.search_settings.set_wrap_around(True)
@@ -137,9 +147,76 @@ class EditorTab(Gtk.Paned):
         scheme = GtkSource.StyleSchemeManager.get_default().get_scheme(s.color_scheme)
         if scheme:
             self.buffer.set_style_scheme(scheme)
-        self._preview_dark = "dark" in (s.color_scheme or "").lower()
+        self._preview_dark = theming.is_dark_scheme(s.color_scheme or "", self._scheme_variants())
         if self.preview is not None and hasattr(self.preview, "set_dark"):
             self.preview.set_dark(self._preview_dark)
+        ratio = clamp_split_ratio(s.markdown_split_ratio)
+        if ratio != self._split_ratio:
+            self._split_ratio = ratio
+            if self.preview_visible:
+                self._request_split_ratio()
+
+    @staticmethod
+    def _scheme_variants() -> dict[str, theming.SchemeVariants]:
+        # Cached on the class: the manager's metadata doesn't change at runtime.
+        cached = getattr(EditorTab, "_scheme_variants_cache", None)
+        if cached is None:
+            cached, _ids = theming.collect_scheme_variants()
+            EditorTab._scheme_variants_cache = cached
+        return cached
+
+    # ---------- markdown split ----------
+
+    def _request_split_ratio(self) -> None:
+        """Put the divider at the remembered fraction of the tab's width.
+
+        Auto-preview fires while the tab is still being built, before GTK
+        has given it a size — `get_width()` is 0 there, so the request is
+        parked until `do_size_allocate` reports a real width.
+        """
+        width = self.get_width()
+        if width <= 0:
+            self._split_pending = True
+            return
+        self._split_pending = False
+        self._split_applied_width = width
+        self.set_position(int(width * self._split_ratio))
+
+    def do_size_allocate(self, width: int, height: int, baseline: int) -> None:
+        self._allocating = True
+        try:
+            Gtk.Paned.do_size_allocate(self, width, height, baseline)
+        finally:
+            self._allocating = False
+        if width <= 0:
+            return
+        # GtkPaned carries the divider's *position* across a resize, so a tab
+        # first laid out at the window's full width keeps that pixel offset
+        # once the sidebar claims its 240px — landing at ~2/3 instead of half.
+        # The stored fraction is what's authoritative, so re-derive from it
+        # whenever the width we computed against is no longer current.
+        stale = self.preview_visible and width != self._split_applied_width
+        if self._split_pending or stale:
+            self._request_split_ratio()
+
+    def _on_split_position_changed(self, *_args: object) -> None:
+        """Remember a split the user dragged.
+
+        Position changes GTK makes itself while re-laying out (a window
+        resize keeps the ratio anyway) arrive during allocation — only the
+        ones outside it are the user moving the handle.
+        """
+        if self._allocating or not self.preview_visible:
+            return
+        width = self.get_width()
+        if width <= 0:
+            return
+        ratio = clamp_split_ratio(self.get_position() / width)
+        if abs(ratio - self._split_ratio) < 0.005:
+            return
+        self._split_ratio = ratio
+        if self.on_split_ratio_changed is not None:
+            self.on_split_ratio_changed(ratio)
 
     def _ensure_preview(self) -> "Gtk.Widget | None":
         if self.preview is not None:
@@ -208,9 +285,7 @@ class EditorTab(Gtk.Paned):
             base = self.buffer.path.parent if self.buffer.path else None
             preview.update(text, base)
             preview.flush()
-            width = self.get_width()
-            if width > 0:
-                self.set_position(width // 2)
+            self._request_split_ratio()
             return True
         if self.preview is not None:
             self.preview.set_visible(False)
@@ -405,6 +480,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._apply_sidebar_visibility()
 
         self._autosave_timer_id: int | None = None
+        self._split_save_timer_id: int | None = None
         self.connect("notify::is-active", self._on_active_changed)
 
         GLib.idle_add(self._init_deferred, priority=GLib.PRIORITY_LOW)
@@ -544,6 +620,7 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("toggle-preview", self.action_toggle_preview),
             ("sidebar-new-file", self.action_sidebar_new_file),
             ("sidebar-new-folder", self.action_sidebar_new_folder),
+            ("sidebar-rename", self.action_sidebar_rename),
             ("sidebar-find", self.action_sidebar_find),
             ("sidebar-replace", self.action_sidebar_replace),
             ("sidebar-replace-with", self.action_sidebar_replace_with),
@@ -586,9 +663,26 @@ class EditorWindow(Gtk.ApplicationWindow):
         buffer.connect("notify::path-str", lambda *_: self._maybe_auto_preview(tab))
         tab.on_external_change = self._on_buffer_external_change
         tab.on_open_path = self.open_path
+        tab.on_split_ratio_changed = self._on_split_ratio_changed
         tab.view.grab_focus()
         self._maybe_auto_preview(tab)
         return tab
+
+    def _on_split_ratio_changed(self, ratio: float) -> None:
+        """A markdown split was dragged — remember it for the next preview."""
+        if self.settings.markdown_split_ratio == ratio:
+            return
+        self.settings.markdown_split_ratio = ratio
+        if self._split_save_timer_id is not None:
+            GLib.source_remove(self._split_save_timer_id)
+        self._split_save_timer_id = GLib.timeout_add(
+            SPLIT_SAVE_DELAY_MS, self._split_ratio_save_fire
+        )
+
+    def _split_ratio_save_fire(self) -> bool:
+        self._split_save_timer_id = None
+        self.settings.save()
+        return False  # one-shot
 
     def _make_tab_label(self, tab: EditorTab) -> Gtk.Box:
         box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
@@ -979,26 +1073,40 @@ class EditorWindow(Gtk.ApplicationWindow):
             for tab in self.all_tabs():
                 tab._apply_settings(self.settings)
 
+    def _effective_dark(self) -> bool:
+        """Is the UI dark right now? Resolves `auto` to what's actually applied."""
+        mode = self.settings.dark_ui if isinstance(self.settings.dark_ui, str) else "auto"
+        if mode in ("light", "dark"):
+            return mode == "dark"
+        gtk_settings = Gtk.Settings.get_default()
+        if gtk_settings is not None:
+            return bool(gtk_settings.get_property("gtk-application-prefer-dark-theme"))
+        return theming.is_dark_scheme(self.settings.color_scheme, {})
+
     def action_toggle_dark(self, *_args: object) -> None:
-        cycle = ["auto", "light", "dark"]
-        current = self.settings.dark_ui if isinstance(self.settings.dark_ui, str) else "auto"
-        nxt = cycle[(cycle.index(current) + 1) % len(cycle)] if current in cycle else "auto"
-        self.settings.dark_ui = nxt
-        if nxt == "dark" and "dark" not in self.settings.color_scheme.lower():
-            ids = GtkSource.StyleSchemeManager.get_default().get_scheme_ids() or []
-            if f"{self.settings.color_scheme}-dark" in ids:
-                self.settings.color_scheme = f"{self.settings.color_scheme}-dark"
-            elif "Adwaita-dark" in ids:
-                self.settings.color_scheme = "Adwaita-dark"
-        elif nxt == "light" and "dark" in self.settings.color_scheme.lower():
-            self.settings.color_scheme = self.settings.color_scheme.replace("-dark", "")
+        """Flip the whole app between light and dark in one step.
+
+        Two states, not a three-way cycle: `auto` remains a Preferences
+        choice, but toggling from it lands on the opposite of what is on
+        screen instead of costing a second press. The UI theme and the
+        editor colour scheme always move together.
+        """
+        variants, available = theming.collect_scheme_variants()
+        dark_ui, scheme = theming.next_theme(
+            self.settings.color_scheme,
+            currently_dark=self._effective_dark(),
+            variants=variants,
+            available=available,
+        )
+        self.settings.dark_ui = dark_ui
+        self.settings.color_scheme = scheme
         self.settings.save()
         app = self.get_application()
         if app and hasattr(app, "broadcast_settings"):
             app.broadcast_settings(self.settings)
         else:
             self.apply_settings(self.settings)
-        self._set_status(f"Theme: {nxt}")
+        self._set_status(_("Theme: dark") if dark_ui == "dark" else _("Theme: light"))
 
     def action_open_project(self, *_args: object) -> None:
         dialog = Gtk.FileDialog.new()
@@ -1102,6 +1210,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         handlers = {
             "new-file": self.action_sidebar_new_file,
             "new-folder": self.action_sidebar_new_folder,
+            "rename": self.action_sidebar_rename,
             "find": self.action_sidebar_find,
             "replace": self.action_sidebar_replace,
             "replace-with": self.action_sidebar_replace_with,
@@ -1156,6 +1265,87 @@ class EditorWindow(Gtk.ApplicationWindow):
             lambda name: self._create_folder_in(target_dir, name),
         )
         self.sidebar.clear_context_path()
+
+    def action_sidebar_rename(self, *_args: object) -> None:
+        target = self._sidebar_target_path()
+        if target is None:
+            self._set_status(_("Select a file or folder to rename"))
+            return
+        if not target.exists():
+            self._alert(_("Cannot rename"), _("{path} no longer exists.").format(path=target))
+            return
+        self._prompt_string(
+            _("Rename"),
+            _("New name for {name}:").format(name=target.name),
+            target.name,
+            lambda new_name: self._rename_path(target, new_name),
+        )
+        self.sidebar.clear_context_path()
+
+    def _rename_path(self, source: Path, new_name: str) -> None:
+        new_name = new_name.strip()
+        if not new_name or new_name == source.name:
+            return
+        if file_io.invalid_name_reason(new_name) is not None:
+            self._alert(_("Invalid name"), _("Name cannot contain '/'."))
+            return
+        target = source.parent / new_name
+        if target.exists() and not self._same_file(source, target):
+            self._alert(_("Already exists"), str(target))
+            return
+        try:
+            source.rename(target)
+        except OSError as e:
+            self._alert(_("Cannot rename"), f"{source} → {target}: {e}")
+            return
+        self._retarget_open_buffers(source, target)
+        self._retarget_projects(source, target)
+        self._set_status(
+            _("Renamed {old} to {new}").format(old=source.name, new=new_name)
+        )
+
+    @staticmethod
+    def _same_file(source: Path, target: Path) -> bool:
+        """Same inode? On a case-insensitive mount README.md and readme.md
+        are one file, and renaming between them must not be refused as a
+        collision with itself."""
+        try:
+            return source.samefile(target)
+        except OSError:
+            return False
+
+    def _retarget_open_buffers(self, source: Path, target: Path) -> None:
+        """Point every open tab at the renamed file — in all windows."""
+        app = self.get_application()
+        windows = list(app.get_windows()) if app is not None else [self]
+        for window in windows:
+            if not hasattr(window, "all_tabs"):
+                continue
+            for tab in window.all_tabs():
+                path = tab.buffer.path
+                if path is None:
+                    continue
+                moved = file_io.rewritten_path(path, source, target)
+                if moved is None:
+                    continue
+                tab.buffer.path = moved
+                # An extension change means a different language, and the
+                # markdown auto-preview hangs off the same path notify.
+                tab.buffer.detect_language()
+
+    def _retarget_projects(self, source: Path, target: Path) -> None:
+        """Rebuild the tree, following any project root that just moved."""
+        projects = self.sidebar.projects()
+        moved = [file_io.rewritten_path(p, source, target) or p for p in projects]
+        if moved == projects:
+            self._refresh_sidebar()
+            return
+        self.sidebar.set_projects(moved, list(self.settings.ignore_patterns))
+        self._persist_projects()
+        self.settings.save()
+        app = self.get_application()
+        if app and hasattr(app, "broadcast_settings"):
+            app.broadcast_settings(self.settings)
 
     def _create_file_in(self, parent: Path, name: str) -> None:
         name = name.strip()
@@ -1602,7 +1792,16 @@ class EditorWindow(Gtk.ApplicationWindow):
 
     # ---------- Close request / dirty guard ----------
 
+    def _flush_split_ratio_save(self) -> None:
+        """Write a just-dragged split now instead of losing it to the debounce."""
+        if self._split_save_timer_id is None:
+            return
+        GLib.source_remove(self._split_save_timer_id)
+        self._split_save_timer_id = None
+        self.settings.save()
+
     def _on_close_request(self, _win: Gtk.Window) -> bool:
+        self._flush_split_ratio_save()
         # Snapshot the layout before any tab is torn down by the save prompts.
         self._pending_session_state = (
             self._session_state() if self.settings.restore_session else None

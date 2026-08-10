@@ -78,3 +78,30 @@ def save_file(path: Path, text: str, encoding: str = "utf-8") -> float:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text.encode(encoding, errors="replace"))
     return path.stat().st_mtime
+
+
+def invalid_name_reason(name: str) -> str | None:
+    """Why `name` can't be used as a single path component — None if it can."""
+    stripped = name.strip()
+    if not stripped:
+        return "empty"
+    if "/" in stripped:
+        return "separator"
+    if stripped in (".", ".."):
+        return "reserved"
+    return None
+
+
+def rewritten_path(path: Path, source: Path, target: Path) -> Path | None:
+    """Where `path` ends up after `source` is renamed to `target`.
+
+    Returns None when `path` is untouched by the rename — including the
+    sibling-prefix case (`/p/oldish` does not live inside `/p/old`).
+    """
+    if path == source:
+        return target
+    try:
+        relative = path.relative_to(source)
+    except ValueError:
+        return None
+    return target / relative

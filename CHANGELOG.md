@@ -3,6 +3,37 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.14] - 2026-08-10
+
+### Added
+- **Rename files and folders.** `F2`, or *Rename…* in the sidebar's
+  right-click menu. Open tabs follow the renamed file (including files
+  inside a renamed folder), the language is re-detected when the
+  extension changes, and renaming a project root keeps it in the
+  sidebar.
+- **Minimap keyboard shortcut** (`Ctrl+Alt+M`). The toggle existed in the
+  View menu and Command Palette but had no accelerator.
+- **The Markdown split is remembered.** Drag the divider between editor
+  and preview and that ratio is reused for every markdown file you open
+  afterwards, across restarts.
+
+### Fixed
+- **Dark mode toggle is now two states, not three.** `Ctrl+Shift+D` used
+  to cycle *auto → light → dark*, so from the default *auto* the first
+  press only moved the app chrome and a second press was needed before
+  the editor followed. It now flips straight to the opposite of what is
+  on screen, changing the UI theme and the editor colour scheme in the
+  same step. *Follow system* remains available in Preferences.
+- **Editor colour schemes with no `-dark` in their name** are handled
+  correctly. The old string matching mapped `solarized-dark` to a
+  nonexistent `solarized` (leaving the scheme untouched) and treated the
+  dark `cobalt` and `oblivion` as light. Light/dark pairing now reads
+  GtkSourceView's own scheme metadata.
+- **Markdown preview opens at a 50/50 split.** Auto-preview runs while
+  the tab is still being built, before GTK has given it a width, so the
+  half-width calculation was skipped and the panes landed wherever the
+  natural sizes fell.
+
 ## [0.7.13] - 2026-07-22
 
 ### Added

@@ -216,3 +216,52 @@ msgstr "Wesprzyj autora"
 
 msgid "Released under the MIT License. See the LICENSE file shipped with Apedi for the full text."
 msgstr "Wydane na licencji MIT. Pełen tekst licencji znajdziesz w pliku LICENSE dołączonym do Apedi."
+
+# Rename, minimap shortcut, two-state theme toggle (added 2026-08-10)
+msgid "Rename…"
+msgstr "Zmień nazwę…"
+
+msgid "Rename"
+msgstr "Zmień nazwę"
+
+msgid "New name for {name}:"
+msgstr "Nowa nazwa dla {name}:"
+
+msgid "Select a file or folder to rename"
+msgstr "Wybierz plik lub folder, któremu chcesz zmienić nazwę"
+
+msgid "Cannot rename"
+msgstr "Nie można zmienić nazwy"
+
+msgid "{path} no longer exists."
+msgstr "{path} już nie istnieje."
+
+msgid "Invalid name"
+msgstr "Nieprawidłowa nazwa"
+
+msgid "Name cannot contain '/'."
+msgstr "Nazwa nie może zawierać „/”."
+
+msgid "Already exists"
+msgstr "Już istnieje"
+
+msgid "Renamed {old} to {new}"
+msgstr "Zmieniono nazwę {old} na {new}"
+
+msgid "Rename selected file/folder"
+msgstr "Zmień nazwę zaznaczonego pliku/folderu"
+
+msgid "Toggle Minimap"
+msgstr "Przełącz minimapę"
+
+msgid "Toggle minimap"
+msgstr "Przełącz minimapę"
+
+msgid "Toggle light / dark theme"
+msgstr "Przełącz motyw jasny / ciemny"
+
+msgid "Theme: dark"
+msgstr "Motyw: ciemny"
+
+msgid "Theme: light"
+msgstr "Motyw: jasny"

@@ -324,6 +324,8 @@ class ProjectSidebar(Gtk.Box):
         add_button(_("New File…"), "new-file")
         add_button(_("New Folder…"), "new-folder")
         add_separator()
+        add_button(_("Rename…"), "rename")
+        add_separator()
         add_button(_("Find in {scope}…").format(scope=scope_label), "find")
         add_button(_("Replace in {scope}…").format(scope=scope_label), "replace")
         add_button(_("Replace with…"), "replace-with")

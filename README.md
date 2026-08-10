@@ -66,7 +66,9 @@ sudo snap install --dangerous ./apedi_*.snap
 | `Ctrl+Shift+F`       | Find in Files                   |
 | `Ctrl+Shift+I`       | Format current file             |
 | `Ctrl+,`             | Preferences                     |
-| `Ctrl+Shift+D`       | Cycle theme (auto / light / dark) |
+| `Ctrl+Shift+D`       | Toggle light / dark theme       |
+| `Ctrl+Alt+M`         | Toggle minimap                  |
+| `F2`                 | Rename selected file / folder   |
 | `F9`                 | Toggle sidebar                  |
 | `` Ctrl+` ``         | Toggle terminal                 |
 | `Ctrl+Q`             | Quit                            |

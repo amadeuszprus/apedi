@@ -1,6 +1,8 @@
 from pathlib import Path
 
-from apedi.settings import Settings
+import pytest
+
+from apedi.settings import Settings, clamp_split_ratio
 
 
 def test_load_defaults_when_missing(tmp_path: Path) -> None:
@@ -37,3 +39,31 @@ def test_load_handles_corrupt_file(tmp_path: Path) -> None:
 
 def test_font_description() -> None:
     assert Settings(font="Hack", font_size=12).font_description() == "Hack 12"
+
+
+# ---------- markdown split ratio ----------
+
+def test_markdown_split_ratio_defaults_to_half() -> None:
+    assert Settings().markdown_split_ratio == 0.5
+
+
+def test_markdown_split_ratio_roundtrip(tmp_path: Path) -> None:
+    cfg = tmp_path / "config.toml"
+    Settings(markdown_split_ratio=0.37).save(cfg)
+    assert Settings.load(cfg).markdown_split_ratio == pytest.approx(0.37)
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (0.5, 0.5),
+    (0.25, 0.25),
+    (0.0, 0.1),      # clamped — a pane must stay grabbable
+    (1.0, 0.9),
+    (-3, 0.1),
+    (42, 0.9),
+    (1, 0.9),        # TOML may hand back an int
+    ("nope", 0.5),
+    (None, 0.5),
+    (True, 0.5),     # bool is an int subclass; must not become 0.9
+])
+def test_clamp_split_ratio(raw: object, expected: float) -> None:
+    assert clamp_split_ratio(raw) == pytest.approx(expected)

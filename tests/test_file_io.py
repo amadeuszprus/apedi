@@ -67,3 +67,34 @@ def test_is_binary() -> None:
 
 def test_detect_encoding_utf8() -> None:
     assert file_io.detect_encoding("hello".encode("utf-8")) == "utf-8"
+
+
+# ---------- rename helpers ----------
+
+@pytest.mark.parametrize("name", ["notes.md", "  spaced.txt  ", "ź.py", "a b.c"])
+def test_invalid_name_reason_accepts(name: str) -> None:
+    assert file_io.invalid_name_reason(name) is None
+
+
+@pytest.mark.parametrize("name", ["", "   ", "a/b", "/abs", ".", "..", " .. "])
+def test_invalid_name_reason_rejects(name: str) -> None:
+    assert file_io.invalid_name_reason(name) is not None
+
+
+def test_rewritten_path_exact_match() -> None:
+    got = file_io.rewritten_path(Path("/p/old.txt"), Path("/p/old.txt"), Path("/p/new.txt"))
+    assert got == Path("/p/new.txt")
+
+
+def test_rewritten_path_child_of_renamed_dir() -> None:
+    got = file_io.rewritten_path(Path("/p/old/sub/a.txt"), Path("/p/old"), Path("/p/new"))
+    assert got == Path("/p/new/sub/a.txt")
+
+
+def test_rewritten_path_unaffected_returns_none() -> None:
+    assert file_io.rewritten_path(Path("/p/other.txt"), Path("/p/old"), Path("/p/new")) is None
+
+
+def test_rewritten_path_sibling_prefix_is_not_a_child() -> None:
+    """`/p/oldish` must not be treated as living inside `/p/old`."""
+    assert file_io.rewritten_path(Path("/p/oldish"), Path("/p/old"), Path("/p/new")) is None
