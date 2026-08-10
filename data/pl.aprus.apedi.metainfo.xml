@@ -36,6 +36,12 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.14" date="2026-08-10">
+      <description><p>Rename files and folders from the sidebar or with <code>F2</code> — open tabs follow the renamed file. New <code>Ctrl+Alt+M</code> shortcut for the minimap. The Markdown editor/preview split now opens at 50/50 and remembers whatever ratio you drag it to. Dark mode is a straight light/dark toggle again: one press of <code>Ctrl+Shift+D</code> switches both the interface and the editor colour scheme, and schemes like Solarized, Cobalt and Oblivion now pair up correctly.</p></description>
+    </release>
+    <release version="0.7.13" date="2026-07-22">
+      <description><p>Command Palette (<code>Ctrl+Shift+P</code>) for running any editor command, a minimap code overview, and session restore that reopens your previous tabs and cursor positions. Fenced code blocks in the Markdown preview get real syntax highlighting, and the preview scrolls in sync with the source without jumping to the top on every keystroke.</p></description>
+    </release>
     <release version="0.7.12" date="2026-07-07">
       <description><p>Vue and Svelte files get syntax highlighting (HTML fallback). Find in Files has a new project switcher (defaults to the sidebar-selected project). AppStream icon reference switched to <code>type="local"</code> so Ubuntu Software / GNOME Software can resolve it.</p></description>
     </release>
