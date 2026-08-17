@@ -51,7 +51,7 @@ class Settings:
     font_size: int = 11
     tab_width: int = 4
     use_spaces: bool = True
-    wrap_lines: bool = False
+    wrap_lines: bool = True
     show_line_numbers: bool = True
     color_scheme: str = "Adwaita"
     auto_indent: bool = True

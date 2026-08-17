@@ -30,6 +30,7 @@ SHORTCUTS: list[tuple[str, list[str]]] = [
     ("win.command-palette", ["<Primary><Shift>p"]),
     ("win.find-in-files", ["<Primary><Shift>f"]),
     ("win.toggle-minimap", ["<Primary><Alt>m"]),
+    ("win.toggle-wrap", ["<Alt>z"]),
     ("win.sidebar-new-file", ["<Primary><Alt>n"]),
     ("win.sidebar-new-folder", ["<Primary><Alt><Shift>n"]),
     ("win.sidebar-rename", ["F2"]),

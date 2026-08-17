@@ -134,6 +134,12 @@ class EditorTab(Gtk.Paned):
         self.view.set_indent_width(s.tab_width)
         self.view.set_insert_spaces_instead_of_tabs(s.use_spaces)
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR if s.wrap_lines else Gtk.WrapMode.NONE)
+        # Wrapped text never overflows, so pin the horizontal scrollbar off
+        # rather than leaving it to the scrolled window's automatic policy.
+        self._editor_scroll.set_policy(
+            Gtk.PolicyType.NEVER if s.wrap_lines else Gtk.PolicyType.AUTOMATIC,
+            Gtk.PolicyType.AUTOMATIC,
+        )
         self.view.set_monospace(True)
         if hasattr(self, "_minimap"):
             self._minimap.set_visible(s.show_minimap)
@@ -1047,15 +1053,14 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._set_status(f"Formatted ({lang_id})")
 
     def action_toggle_wrap(self, *_args: object) -> None:
-        tab = self.current_tab()
-        if tab is None:
-            return
-        new_mode = (
-            Gtk.WrapMode.WORD_CHAR
-            if tab.view.get_wrap_mode() == Gtk.WrapMode.NONE
-            else Gtk.WrapMode.NONE
-        )
-        tab.view.set_wrap_mode(new_mode)
+        self.settings.wrap_lines = not self.settings.wrap_lines
+        self.settings.save()
+        app = self.get_application()
+        if app is not None and hasattr(app, "broadcast_settings"):
+            app.broadcast_settings(self.settings)
+        else:
+            for tab in self.all_tabs():
+                tab._apply_settings(self.settings)
 
     def action_toggle_line_numbers(self, *_args: object) -> None:
         tab = self.current_tab()

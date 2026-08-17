@@ -257,6 +257,9 @@ msgstr "Przełącz minimapę"
 msgid "Toggle minimap"
 msgstr "Przełącz minimapę"
 
+msgid "Toggle word wrap"
+msgstr "Przełącz zawijanie wierszy"
+
 msgid "Toggle light / dark theme"
 msgstr "Przełącz motyw jasny / ciemny"
 

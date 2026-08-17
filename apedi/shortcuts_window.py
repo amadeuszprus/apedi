@@ -71,6 +71,7 @@ def present(parent: Gtk.Window) -> None:
     _add(view_group, "<Primary><Shift>grave", _("New terminal"))
     _add(view_group, "<Primary><Shift>m",     _("Toggle Markdown preview"))
     _add(view_group, "<Primary><Alt>m",       _("Toggle minimap"))
+    _add(view_group, "<Alt>z",                _("Toggle word wrap"))
     _add(view_group, "<Primary>comma",        _("Preferences"))
     _add(view_group, "<Primary><Shift>d",     _("Toggle light / dark theme"))
     section.add_group(view_group)

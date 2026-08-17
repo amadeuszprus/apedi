@@ -23,6 +23,7 @@ project tree, integrated terminal, and a clean modern GTK 4 interface.
 - Auto-detect dark / light theme from the desktop preference, or pick
   one from Preferences
 - Search, replace (`Ctrl+R`), goto line (`Ctrl+G`)
+- Word wrap on by default — no horizontal scrolling; toggle with `Alt+Z`
 - Recent files menu, drag & drop
 - Optional autosave (after delay or on focus loss)
 - Crash recovery — drafts persist to `~/.cache/apedi/drafts/`

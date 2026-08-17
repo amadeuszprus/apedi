@@ -3,6 +3,25 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.15] - 2026-08-17
+
+### Changed
+- **Long lines wrap by default**, so a wide file no longer scrolls
+  sideways. The horizontal scrollbar is now switched off outright while
+  wrapping is on, instead of being left to the scrolled window's
+  automatic policy. Wrapping stays optional — *Preferences → Editor →
+  Wrap long lines*, or the *Toggle Word Wrap* command. An explicit
+  `wrap_lines = false` already in `~/.config/apedi/config.toml` is
+  respected and not overwritten by the new default.
+- **Toggle Word Wrap is now a real setting, not a per-tab quirk.** The
+  View menu and Command Palette entry used to flip only the current tab,
+  lose the state when the tab closed, and have it silently reverted the
+  next time Preferences were saved. It now applies to every tab in every
+  window and persists, matching how *Toggle Minimap* behaves.
+
+### Added
+- **Word wrap keyboard shortcut** (`Alt+Z`).
+
 ## [0.7.14] - 2026-08-10
 
 ### Added

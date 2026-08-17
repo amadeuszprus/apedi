@@ -67,3 +67,21 @@ def test_markdown_split_ratio_roundtrip(tmp_path: Path) -> None:
 ])
 def test_clamp_split_ratio(raw: object, expected: float) -> None:
     assert clamp_split_ratio(raw) == pytest.approx(expected)
+
+
+# ---------- word wrap ----------
+
+def test_wrap_lines_defaults_on() -> None:
+    assert Settings().wrap_lines is True
+
+
+def test_wrap_lines_defaults_on_when_config_missing(tmp_path: Path) -> None:
+    assert Settings.load(tmp_path / "missing.toml").wrap_lines is True
+
+
+def test_wrap_lines_opt_out_survives_reload(tmp_path: Path) -> None:
+    # An explicit `false` in the config is a user decision — the new default
+    # must not silently turn wrapping back on.
+    cfg = tmp_path / "config.toml"
+    Settings(wrap_lines=False).save(cfg)
+    assert Settings.load(cfg).wrap_lines is False

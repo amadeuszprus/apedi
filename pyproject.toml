@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apedi"
-version = "0.7.14"
+version = "0.7.15"
 description = "A fast, simple text editor with syntax highlighting and code formatting"
 readme = "README.md"
 requires-python = ">=3.11"

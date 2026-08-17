@@ -36,6 +36,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.15" date="2026-08-17">
+      <description><p>Long lines now wrap by default, so wide files no longer scroll sideways — the horizontal scrollbar is switched off outright while wrapping is on. Wrapping stays optional in Preferences → Editor, and the Toggle Word Wrap command is now a real setting with an <code>Alt+Z</code> shortcut: it applies to every tab in every window and is remembered, instead of flipping one tab until the next time Preferences were saved.</p></description>
+    </release>
     <release version="0.7.14" date="2026-08-10">
       <description><p>Rename files and folders from the sidebar or with <code>F2</code> — open tabs follow the renamed file. New <code>Ctrl+Alt+M</code> shortcut for the minimap. The Markdown editor/preview split now opens at 50/50 and remembers whatever ratio you drag it to. Dark mode is a straight light/dark toggle again: one press of <code>Ctrl+Shift+D</code> switches both the interface and the editor colour scheme, and schemes like Solarized, Cobalt and Oblivion now pair up correctly.</p></description>
     </release>
