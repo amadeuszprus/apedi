@@ -38,8 +38,13 @@ def _safe_is_dir(path: Path) -> bool:
         return False
 
 
-def _list_dir(path: Path, ignore: IgnoreFilter | None) -> Gio.ListStore:
-    store = Gio.ListStore.new(FileNode)
+def _sort_key(node: "FileNode") -> tuple[bool, str]:
+    """Folders first, then case-insensitive by name — the order `_scan_dir`
+    emits, and the order `_sync_store` relies on when merging."""
+    return (not node.is_dir, node.name.lower())
+
+
+def _scan_dir(path: Path, ignore: IgnoreFilter | None) -> list["FileNode"]:
     try:
         entries = sorted(
             path.iterdir(),
@@ -47,7 +52,8 @@ def _list_dir(path: Path, ignore: IgnoreFilter | None) -> Gio.ListStore:
         )
     except OSError as e:
         log.debug("cannot list %s: %s", path, e)
-        return store
+        return []
+    nodes: list[FileNode] = []
     for entry in entries:
         if entry.name in (".git",):
             # always hide .git itself even when not in gitignore
@@ -58,8 +64,50 @@ def _list_dir(path: Path, ignore: IgnoreFilter | None) -> Gio.ListStore:
         node.is_dir = _safe_is_dir(entry)
         node.is_heavy = ignore.is_heavy(entry) if ignore else False
         node.is_ignored = ignore.is_ignored(entry) if ignore else False
+        nodes.append(node)
+    return nodes
+
+
+def _list_dir(path: Path, ignore: IgnoreFilter | None) -> Gio.ListStore:
+    store = Gio.ListStore.new(FileNode)
+    for node in _scan_dir(path, ignore):
         store.append(node)
     return store
+
+
+def _sync_store(store: Gio.ListStore, fresh: list["FileNode"]) -> None:
+    """Merge `fresh` into `store` in place, both sorted by `_sort_key`.
+
+    In-place is the whole point: rebuilding the store would destroy the
+    GtkTreeListRow attached to every folder, collapsing the tree. Surviving
+    rows keep their identity, so their expansion survives too.
+    """
+    i = 0
+    for node in fresh:
+        while i < store.get_n_items():
+            existing = store.get_item(i)
+            if existing.path_str == node.path_str:
+                break
+            if _sort_key(existing) >= _sort_key(node):
+                break
+            # Sorts before the next wanted entry, so it is gone from disk.
+            store.remove(i)
+        if i < store.get_n_items() and store.get_item(i).path_str == node.path_str:
+            existing = store.get_item(i)
+            if existing.is_dir != node.is_dir:
+                # A path that swapped between file and folder also swaps sort
+                # position, so replace it rather than leave the store in an
+                # order later merges no longer hold true.
+                store.remove(i)
+                store.insert(i, node)
+            else:
+                existing.is_heavy = node.is_heavy
+                existing.is_ignored = node.is_ignored
+        else:
+            store.insert(i, node)
+        i += 1
+    while store.get_n_items() > i:
+        store.remove(i)
 
 
 def _make_expand_func(ignore: IgnoreFilter | None):
@@ -90,6 +138,10 @@ class ProjectSidebar(Gtk.Box):
         self.on_file_activate = on_file_activate
         self._projects: list[Path] = []
         self._ignore_filters: dict[str, IgnoreFilter] = {}
+        # Child stores handed to the tree model, keyed by directory path.
+        # Holding them lets `refresh_dir` update a folder in place instead
+        # of rebuilding the tree and collapsing everything.
+        self._child_stores: dict[str, Gio.ListStore] = {}
         self._extra_ignore_patterns: list[str] = []
         self.on_close_project: Callable[[Path], None] | None = None
         self.on_context_action: Callable[[str, Path], None] | None = None
@@ -140,6 +192,7 @@ class ProjectSidebar(Gtk.Box):
         self._roots_store.remove_all()
         self._projects.clear()
         self._ignore_filters.clear()
+        self._child_stores.clear()
         for p in paths:
             self.add_project(p)
 
@@ -167,6 +220,9 @@ class ProjectSidebar(Gtk.Box):
                 break
         self._projects = [p for p in self._projects if p != path]
         self._ignore_filters.pop(str(path), None)
+        prefix = str(path)
+        for key in [k for k in self._child_stores if k == prefix or k.startswith(prefix + "/")]:
+            del self._child_stores[key]
         if self.root_path == path:
             self.root_path = self._projects[-1] if self._projects else None
 
@@ -186,13 +242,35 @@ class ProjectSidebar(Gtk.Box):
                 continue
         return None
 
+    def _ignore_for(self, path: Path) -> IgnoreFilter | None:
+        proj = self.project_for(path)
+        return self._ignore_filters.get(str(proj)) if proj else None
+
     def _expand_for_node(self, item: GObject.Object) -> Gio.ListStore | None:
         if not isinstance(item, FileNode) or not item.is_dir:
             return None
         path = Path(item.path_str)
-        proj = self.project_for(path)
-        ignore = self._ignore_filters.get(str(proj)) if proj else None
-        return _list_dir(path, ignore)
+        store = _list_dir(path, self._ignore_for(path))
+        self._child_stores[item.path_str] = store
+        return store
+
+    def refresh_dir(self, path: Path) -> None:
+        """Re-read one folder, keeping the rest of the tree as the user left it.
+
+        A no-op for a folder that has never been expanded — the tree model
+        lists it fresh the first time it is opened anyway.
+        """
+        store = self._child_stores.get(str(path))
+        if store is None:
+            return
+        _sync_store(store, _scan_dir(path, self._ignore_for(path)))
+        self._prune_child_stores()
+
+    def _prune_child_stores(self) -> None:
+        """Forget stores for folders that no longer exist — a renamed or
+        deleted folder leaves its subtree's entries behind otherwise."""
+        for key in [k for k in self._child_stores if not _safe_is_dir(Path(k))]:
+            del self._child_stores[key]
 
     def set_compact(self, compact: bool) -> None:
         if compact:

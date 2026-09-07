@@ -710,6 +710,13 @@ if GTK_AVAILABLE:
                 self._box.append(fallback)
 
             self.set_child(self._box)
+            # Prose labels are selectable, so a click focuses them and the
+            # viewport scrolls the whole label into view — a jump the user
+            # never asked for, which the scroll sync then echoes into the
+            # source pane. Reading the preview does not need focus tracking.
+            viewport = self.get_child()
+            if isinstance(viewport, Gtk.Viewport):
+                viewport.set_scroll_to_focus(False)
 
         def set_dark(self, is_dark: bool) -> None:
             # Prose colors use alpha(currentColor,…) so they need no re-render,

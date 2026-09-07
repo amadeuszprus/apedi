@@ -221,7 +221,9 @@ class EditorApp(Gtk.Application):
 
     def _maybe_restore_drafts(self, window: EditorWindow) -> bool:
         try:
-            from . import recovery
+            from . import backups, recovery
+
+            backups.prune()
 
             pending = recovery.list_pending()
             if not pending:

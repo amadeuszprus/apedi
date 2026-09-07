@@ -77,6 +77,22 @@ class EditorBuffer(GtkSource.Buffer):
     def get_full_text(self) -> str:
         return self.get_text(self.get_start_iter(), self.get_end_iter(), False)
 
+    def replace_selection(self, new_text: str) -> None:
+        """Swap the selected range for `new_text` in one undo step, leaving the
+        result selected so the user can act on it again."""
+        bounds = self.get_selection_bounds()
+        if not bounds:
+            return
+        start, end = bounds
+        offset = start.get_offset()
+        self.begin_user_action()
+        self.delete(start, end)
+        self.insert(start, new_text)
+        self.end_user_action()
+        new_start = self.get_iter_at_offset(offset)
+        new_end = self.get_iter_at_offset(offset + len(new_text))
+        self.select_range(new_start, new_end)
+
     def replace_text_preserving_cursor(self, new_text: str) -> None:
         """Replace whole text in single undo group, keep cursor on same line."""
         line = self.get_iter_at_mark(self.get_insert()).get_line()

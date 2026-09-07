@@ -3,6 +3,62 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.16] - 2026-09-07
+
+### Added
+- **Normalize Whitespace** (`Ctrl+Alt+I`, *Edit* menu, Command Palette,
+  and the editor's right-click menu whenever text is selected). Converts
+  CRLF and lone CR line endings to LF, strips trailing whitespace,
+  removes the indentation every line shares, re-indents what is left to
+  match your `tab_width`/`use_spaces` settings, collapses runs of blank
+  lines to a single one, and ends the file with exactly one newline —
+  the cleanup a block pasted out of a terminal usually needs. Spacing
+  *inside* a line is left alone, so aligned tables and ASCII art
+  survive, and non-breaking spaces are preserved rather than silently
+  rewritten.
+- **It works on a selection.** With text selected, only that range is
+  rewritten, and it stays selected afterwards. With nothing selected the
+  whole file is normalized.
+- **Hard-wrapped lines are re-joined — but only on a selection.** Text
+  copied out of a terminal arrives broken at the terminal's width, mid
+  sentence. Normalizing a selection stitches those lines back into
+  paragraphs, leaving list items, headings, table rows, fenced code,
+  deeper-indented blocks and deliberately short lines alone. No heuristic
+  can tell a wrap from an intentional line break, so this is fenced in
+  twice: it needs a selection, and it only runs on prose (plain text,
+  Markdown, reStructuredText). In a source file a long statement would
+  otherwise be glued to the line below it, so code is never re-joined.
+- **Format Code falls back to normalizing.** `Ctrl+Shift+I` on a file no
+  formatter owns (`.txt`, `.log`, anything unrecognised) used to answer
+  "No formatter for X" and do nothing; it now runs the whitespace pass
+  instead. It never re-joins wrapped lines, so formatting stays
+  predictable. Files that do have a formatter — Python, JS, Go, Rust and
+  the rest — are unaffected.
+- **Open Backups Folder** in the Command Palette, for the conflict
+  copies described below.
+
+### Changed
+- **A file changed on disk while you had unsaved edits is now a
+  question, not a status line.** The tab used to show a one-line
+  "changed on disk" note that was easy to miss and offered no way to
+  act on it. There is now a dialog — *Keep my version* or *Reload from
+  disk* — and a timestamped copy of the unsaved buffer is written to
+  `~/.cache/apedi/backups/` *before* the dialog appears, so the local
+  version is safe however you answer or dismiss it. Copies older than
+  30 days are cleared out at startup. A file changed on disk while the
+  tab has **no** unsaved edits still reloads silently, as before.
+
+### Fixed
+- **The project tree no longer collapses when you rename a file.**
+  Renaming, or creating a file or folder, rebuilt the whole sidebar and
+  threw away every expanded folder along with it. Only the folder that
+  actually changed is re-read now, in place, so the rest of the tree
+  stays exactly as you left it.
+- **Clicking rendered Markdown no longer jumps the scroll position.**
+  Clicking a paragraph in the preview gave it keyboard focus, which
+  scrolled the whole block into view and dragged the source pane along
+  with it through the scroll sync.
+
 ## [0.7.15] - 2026-08-17
 
 ### Changed

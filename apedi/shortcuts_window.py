@@ -53,6 +53,7 @@ def present(parent: Gtk.Window) -> None:
     _add(edit_group, "<Primary>r",            _("Replace"))
     _add(edit_group, "<Primary><Shift>f",     _("Find in Files"))
     _add(edit_group, "<Primary><Shift>i",     _("Format current file"))
+    _add(edit_group, "<Primary><Alt>i",       _("Normalize whitespace"))
     section.add_group(edit_group)
 
     # Sidebar

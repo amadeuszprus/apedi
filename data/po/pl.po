@@ -268,3 +268,58 @@ msgstr "Motyw: ciemny"
 
 msgid "Theme: light"
 msgstr "Motyw: jasny"
+
+# Whitespace normalization, external-change reload + backups (added 2026-09-07)
+msgid "Normalize Whitespace"
+msgstr "Normalizuj białe znaki"
+
+msgid "Normalize whitespace"
+msgstr "Normalizuj białe znaki"
+
+msgid "Normalized whitespace"
+msgstr "Znormalizowano białe znaki"
+
+msgid "Normalized selection"
+msgstr "Znormalizowano zaznaczenie"
+
+msgid "Whitespace already normalized"
+msgstr "Białe znaki są już znormalizowane"
+
+msgid "Open Backups Folder"
+msgstr "Otwórz folder kopii zapasowych"
+
+msgid "Cannot open backups"
+msgstr "Nie można otworzyć kopii zapasowych"
+
+msgid "{name} changed on disk"
+msgstr "{name} zmienił się na dysku"
+
+msgid "{name} changed on disk — reloading"
+msgstr "{name} zmienił się na dysku — przeładowuję"
+
+msgid "You have unsaved edits in this tab. {where}"
+msgstr "Ta zakładka ma niezapisane zmiany. {where}"
+
+msgid "Your unsaved version was backed up to {copy}."
+msgstr "Twoja niezapisana wersja została skopiowana do {copy}."
+
+msgid "Backing up your unsaved version failed — reloading would lose it."
+msgstr "Nie udało się zrobić kopii Twojej niezapisanej wersji — przeładowanie ją utraci."
+
+msgid "Reload from disk"
+msgstr "Przeładuj z dysku"
+
+msgid "Keep my version"
+msgstr "Zostaw moją wersję"
+
+msgid "Kept your version"
+msgstr "Zostawiono Twoją wersję"
+
+msgid "Kept your version — backup at {copy}"
+msgstr "Zostawiono Twoją wersję — kopia w {copy}"
+
+msgid "Reloaded {name} from disk"
+msgstr "Przeładowano {name} z dysku"
+
+msgid "Cannot reload {name}: {error}"
+msgstr "Nie można przeładować {name}: {error}"

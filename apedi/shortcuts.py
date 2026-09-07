@@ -18,6 +18,7 @@ SHORTCUTS: list[tuple[str, list[str]]] = [
     ("win.replace", ["<Primary>r"]),
     ("win.goto-line", ["<Primary>g"]),
     ("win.format", ["<Primary><Shift>i"]),
+    ("win.normalize", ["<Primary><Alt>i"]),
     ("win.preferences", ["<Primary>comma"]),
     ("win.toggle-dark", ["<Primary><Shift>d"]),
     ("win.open-project", ["<Primary><Shift>o"]),

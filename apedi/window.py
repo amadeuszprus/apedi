@@ -60,6 +60,7 @@ class EditorTab(Gtk.Paned):
         self.set_wide_handle(True)
         self.buffer = buffer
         self.view = GtkSource.View.new_with_buffer(buffer)
+        self._wire_selection_menu()
         self._editor_scroll = Gtk.ScrolledWindow()
         self._editor_scroll.set_hexpand(True)
         self._editor_scroll.set_vexpand(True)
@@ -95,6 +96,20 @@ class EditorTab(Gtk.Paned):
         self.on_external_change: Callable[[Path], None] | None = None
         buffer.connect("notify::path-str", lambda *_: self._rewire_monitor())
         self._rewire_monitor()
+
+    def _wire_selection_menu(self) -> None:
+        """Offer Normalize Whitespace in the right-click menu, but only while
+        something is selected — that is the scope the command acts on."""
+        menu = Gio.Menu()
+        menu.append(_("Normalize Whitespace"), "win.normalize")
+        self._selection_menu = menu
+
+        def sync(*_args: object) -> None:
+            has_selection = self.buffer.get_has_selection()
+            self.view.set_extra_menu(menu if has_selection else None)
+
+        self.buffer.connect("notify::has-selection", sync)
+        sync()
 
     def _rewire_monitor(self) -> None:
         if self._monitor is not None:
@@ -397,6 +412,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         edit_menu.append(_("Go to Line…"), "win.goto-line")
         edit_menu.append(_("Go to Symbol…"), "win.symbols")
         edit_menu.append(_("Format Code"), "win.format")
+        edit_menu.append(_("Normalize Whitespace"), "win.normalize")
 
         view_menu = Gio.Menu()
         view_menu.append(_("Toggle Sidebar"), "win.toggle-sidebar")
@@ -613,6 +629,8 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("replace", self.action_replace),
             ("goto-line", self.action_goto_line),
             ("format", self.action_format),
+            ("normalize", self.action_normalize),
+            ("open-backups", self.action_open_backups),
             ("toggle-wrap", self.action_toggle_wrap),
             ("toggle-line-numbers", self.action_toggle_line_numbers),
             ("toggle-minimap", self.action_toggle_minimap),
@@ -1029,12 +1047,12 @@ class EditorWindow(Gtk.ApplicationWindow):
         if tab is None:
             return
         lang = tab.buffer.get_language()
-        if lang is None:
-            self._set_status("No language detected")
-            return
-        lang_id = lang.get_id()
+        lang_id = lang.get_id() if lang is not None else None
         if not formatters.supports(lang_id):
-            self._set_status(f"No formatter for {lang_id}")
+            # Nothing owns this file type, so fall back to the whitespace pass
+            # rather than leaving Ctrl+Shift+I doing nothing at all. Formatting
+            # must stay predictable, so this route never re-joins wrapped lines.
+            self._normalize_scope(unwrap_selection=False)
             return
         text = tab.buffer.get_full_text()
         filename = str(tab.buffer.path) if tab.buffer.path else f"buffer.{lang_id}"
@@ -1051,6 +1069,66 @@ class EditorWindow(Gtk.ApplicationWindow):
             return
         tab.buffer.replace_text_preserving_cursor(formatted)
         self._set_status(f"Formatted ({lang_id})")
+
+    def action_normalize(self, *_args: object) -> None:
+        """Clean up whitespace — on the selection if there is one, else on the
+        whole file. Re-joining hard-wrapped lines is the one lossy step, so it
+        happens only on a selection, where the user picked the scope."""
+        self._normalize_scope(unwrap_selection=True)
+
+    def _normalize_scope(self, *, unwrap_selection: bool) -> None:
+        from . import normalize
+
+        tab = self.current_tab()
+        if tab is None:
+            return
+        bounds = tab.buffer.get_selection_bounds()
+        if bounds:
+            start, end = bounds
+            text = tab.buffer.get_text(start, end, False)
+            # Re-joining lines is only safe where a line break is decoration.
+            # In source code a long statement would be glued to the next one.
+            lang = tab.buffer.get_language()
+            unwrap = unwrap_selection and normalize.may_unwrap(
+                lang.get_id() if lang is not None else None
+            )
+            cleaned = normalize.normalize_text(
+                text,
+                tab_width=self.settings.tab_width,
+                use_spaces=self.settings.use_spaces,
+                unwrap=unwrap,
+                ensure_final_newline=False,
+            )
+            if cleaned == text:
+                self._set_status(_("Whitespace already normalized"))
+                return
+            tab.buffer.replace_selection(cleaned)
+            self._set_status(_("Normalized selection"))
+            return
+
+        text = tab.buffer.get_full_text()
+        cleaned = normalize.normalize_text(
+            text,
+            tab_width=self.settings.tab_width,
+            use_spaces=self.settings.use_spaces,
+        )
+        if cleaned == text:
+            self._set_status(_("Whitespace already normalized"))
+            return
+        tab.buffer.replace_text_preserving_cursor(cleaned)
+        self._set_status(_("Normalized whitespace"))
+
+    def action_open_backups(self, *_args: object) -> None:
+        from . import backups
+
+        directory = backups.backups_dir()
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            self._alert(_("Cannot open backups"), f"{directory}: {e}")
+            return
+        launcher = Gtk.FileLauncher.new(Gio.File.new_for_path(str(directory)))
+        launcher.launch(self, None, lambda *_: None)
 
     def action_toggle_wrap(self, *_args: object) -> None:
         self.settings.wrap_lines = not self.settings.wrap_lines
@@ -1343,7 +1421,9 @@ class EditorWindow(Gtk.ApplicationWindow):
         projects = self.sidebar.projects()
         moved = [file_io.rewritten_path(p, source, target) or p for p in projects]
         if moved == projects:
-            self._refresh_sidebar()
+            # Same parent folder for both ends of a rename, so one re-list of
+            # it is enough — and it leaves every other folder expanded.
+            self._refresh_sidebar(source.parent)
             return
         self.sidebar.set_projects(moved, list(self.settings.ignore_patterns))
         self._persist_projects()
@@ -1369,7 +1449,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         except OSError as e:
             self._alert(_("Cannot create file"), f"{target}: {e}")
             return
-        self._refresh_sidebar()
+        self._refresh_sidebar(parent)
         self.open_path(target)
         self._set_status(_("Created {name}").format(name=name))
 
@@ -1389,12 +1469,17 @@ class EditorWindow(Gtk.ApplicationWindow):
         except OSError as e:
             self._alert(_("Cannot create folder"), f"{target}: {e}")
             return
-        self._refresh_sidebar()
+        self._refresh_sidebar(parent)
         self._set_status(_("Created {name}/").format(name=name))
 
-    def _refresh_sidebar(self) -> None:
-        # Re-set projects to force re-read of children. Cheaper than a full
-        # FileMonitor wiring for a feature that creates a single entry.
+    def _refresh_sidebar(self, directory: Path | None = None) -> None:
+        """Re-read the tree. With `directory`, only that folder is re-listed,
+        in place, so the rest of the tree keeps the expansion the user set up.
+        Without it, every project is rebuilt — which does collapse the tree,
+        so pass a directory whenever you know which one changed."""
+        if directory is not None:
+            self.sidebar.refresh_dir(directory)
+            return
         self.sidebar.set_projects(
             self.sidebar.projects(), list(self.settings.ignore_patterns),
         )
@@ -1498,6 +1583,8 @@ class EditorWindow(Gtk.ApplicationWindow):
         (_("Go to Line…"), "win.goto-line"),
         (_("Go to Symbol…"), "win.symbols"),
         (_("Format Code"), "win.format"),
+        (_("Normalize Whitespace"), "win.normalize"),
+        (_("Open Backups Folder"), "win.open-backups"),
         (_("Toggle Sidebar"), "win.toggle-sidebar"),
         (_("Toggle Terminal"), "win.toggle-terminal"),
         (_("New Terminal"), "win.new-terminal"),
@@ -1681,17 +1768,65 @@ class EditorWindow(Gtk.ApplicationWindow):
             if tab.buffer.path != path:
                 continue
             if tab.buffer.get_modified():
-                self._set_status(_("{name} changed on disk — your tab has unsaved edits").format(
-                    name=path.name,
-                ))
+                self._prompt_conflicting_reload(tab, path)
             else:
                 self._set_status(_("{name} changed on disk — reloading").format(name=path.name))
-                try:
-                    loaded = file_io.load_file(path)
-                    tab.buffer.load(loaded.text, path, loaded.encoding, loaded.mtime)
-                except (OSError, file_io.BinaryFileError, file_io.FileTooLargeError):
-                    pass
+                self._reload_from_disk(tab, path)
             return
+
+    def _prompt_conflicting_reload(self, tab: EditorTab, path: Path) -> None:
+        """The file moved under a tab that still has unsaved edits.
+
+        The backup is written before the question is even asked, so whichever
+        way the user answers — and however the dialog is dismissed — the local
+        version is already safe on disk.
+        """
+        from . import backups
+
+        if getattr(tab, "_conflict_prompt_open", False):
+            # A tool rewriting the file in a burst emits several change events;
+            # one question per tab is enough until it is answered.
+            return
+        tab._conflict_prompt_open = True
+
+        copy = backups.save_copy(
+            path, tab.buffer.get_full_text(), tab.buffer.encoding,
+        )
+        where = (
+            _("Your unsaved version was backed up to {copy}.").format(copy=copy)
+            if copy is not None
+            else _("Backing up your unsaved version failed — reloading would lose it.")
+        )
+
+        def cont(reload_it: bool) -> None:
+            tab._conflict_prompt_open = False
+            if reload_it:
+                self._reload_from_disk(tab, path)
+            elif copy is not None:
+                self._set_status(_("Kept your version — backup at {copy}").format(copy=copy))
+            else:
+                self._set_status(_("Kept your version"))
+
+        self._confirm_async(
+            _("{name} changed on disk").format(name=path.name),
+            _("You have unsaved edits in this tab. {where}").format(where=where),
+            cont,
+            confirm_label=_("Reload from disk"),
+            cancel_label=_("Keep my version"),
+        )
+
+    def _reload_from_disk(self, tab: EditorTab, path: Path) -> None:
+        try:
+            loaded = file_io.load_file(path)
+        except (OSError, file_io.BinaryFileError, file_io.FileTooLargeError) as e:
+            self._set_status(_("Cannot reload {name}: {error}").format(
+                name=path.name, error=e,
+            ))
+            return
+        tab.buffer.load(loaded.text, path, loaded.encoding, loaded.mtime)
+        from . import recovery
+        recovery.discard(path)
+        self._set_status(_("Reloaded {name} from disk").format(name=path.name))
 
     # ---------- Search ----------
 
@@ -1875,11 +2010,18 @@ class EditorWindow(Gtk.ApplicationWindow):
 
         dialog.choose(self, None, on_response)
 
-    def _confirm_async(self, title: str, body: str, callback: callable) -> None:
+    def _confirm_async(
+        self,
+        title: str,
+        body: str,
+        callback: callable,
+        confirm_label: str = "OK",
+        cancel_label: str = "Cancel",
+    ) -> None:
         dialog = Gtk.AlertDialog()
         dialog.set_message(title)
         dialog.set_detail(body)
-        dialog.set_buttons(["Cancel", "OK"])
+        dialog.set_buttons([cancel_label, confirm_label])
         dialog.set_default_button(1)
         dialog.set_cancel_button(0)
 

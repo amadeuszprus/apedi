@@ -36,6 +36,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.16" date="2026-09-07">
+      <description><p>New Normalize Whitespace command (<code>Ctrl+Alt+I</code>, also in the right-click menu) tidies pasted text: LF line endings, no trailing spaces, shared indentation removed, no runs of blank lines. Run it on a selection and it also stitches terminal-wrapped lines back into paragraphs. <code>Ctrl+Shift+I</code> now falls back to the same cleanup on files no formatter handles instead of doing nothing. When a file changes on disk while you have unsaved edits you get a proper choice — keep your version or reload — and a timestamped backup of your buffer is written first either way. The project tree no longer collapses when you rename a file, and clicking a paragraph in the Markdown preview no longer jumps the scroll position.</p></description>
+    </release>
     <release version="0.7.15" date="2026-08-17">
       <description><p>Long lines now wrap by default, so wide files no longer scroll sideways — the horizontal scrollbar is switched off outright while wrapping is on. Wrapping stays optional in Preferences → Editor, and the Toggle Word Wrap command is now a real setting with an <code>Alt+Z</code> shortcut: it applies to every tab in every window and is remembered, instead of flipping one tab until the next time Preferences were saved.</p></description>
     </release>
