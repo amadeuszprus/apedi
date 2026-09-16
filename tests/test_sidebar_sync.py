@@ -39,8 +39,6 @@ def test_rename_swaps_only_the_renamed_entry() -> None:
     store = _store(keep, _node("old.txt"), _node("zzz.txt"))
     _sync_store(store, [_node("aaa.txt"), _node("new.txt"), _node("zzz.txt")])
     assert _names(store) == ["aaa.txt", "new.txt", "zzz.txt"]
-    # Untouched siblings keep their identity — that is what preserves the
-    # expansion state of the rows built from them.
     assert store.get_item(0) is keep
 
 
@@ -125,3 +123,44 @@ def test_type_change_replaces_the_node() -> None:
     assert _names(store) == ["thing"]
     assert store.get_item(0) is not was_file
     assert store.get_item(0).is_dir is True
+
+
+# ---------- git state on rows ----------
+
+
+def test_sync_copies_git_state_onto_surviving_nodes() -> None:
+    keep = _node("a.py")
+    store = _store(keep)
+    fresh = _node("a.py")
+    fresh.git_state = "modified"
+    _sync_store(store, [fresh])
+    assert store.get_item(0) is keep
+    assert keep.git_state == "modified"
+
+
+def test_label_classes_put_git_state_after_the_extension_colour() -> None:
+    from apedi.sidebar import ProjectSidebar
+
+    node = _node("a.py")
+    node.git_state = "modified"
+    classes = ProjectSidebar._label_classes(node)
+    assert classes.index("file-py") < classes.index("git-modified")
+
+
+def test_label_classes_without_git_state_add_nothing() -> None:
+    from apedi.sidebar import ProjectSidebar
+
+    node = _node("a.py")
+    assert not any(c.startswith("git-") for c in ProjectSidebar._label_classes(node))
+
+
+def test_label_classes_for_folders_and_project_roots() -> None:
+    from apedi.sidebar import ProjectSidebar
+
+    folder = _node("src", is_dir=True)
+    folder.git_state = "added"
+    assert ProjectSidebar._label_classes(folder) == ["git-added"]
+    root = _node("repo", is_dir=True)
+    root.is_project = True
+    root.git_state = "conflict"
+    assert ProjectSidebar._label_classes(root) == ["project-root", "git-conflict"]

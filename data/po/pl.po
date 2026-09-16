@@ -143,6 +143,9 @@ msgstr "Automatyczne wcięcia"
 msgid "Trim trailing whitespace on save"
 msgstr "Usuwaj spacje końcowe przy zapisie"
 
+msgid "Git changes (gutter bars and sidebar colours)"
+msgstr "Zmiany git (paski w marginesie i kolory w drzewie)"
+
 # Preferences — Files
 msgid "Autosave"
 msgstr "Automatyczny zapis"
@@ -323,3 +326,6 @@ msgstr "Przeładowano {name} z dysku"
 
 msgid "Cannot reload {name}: {error}"
 msgstr "Nie można przeładować {name}: {error}"
+
+msgid "Loading…"
+msgstr "Wczytywanie…"

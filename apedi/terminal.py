@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import builtins
 import logging
-import os
 from pathlib import Path
 
 if not hasattr(builtins, "_"):
@@ -16,52 +15,9 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Vte", "3.91")
 from gi.repository import GLib, Gtk, Pango, Vte  # noqa: E402
 
+from .shell import resolve_shell, spawn_env
+
 log = logging.getLogger(__name__)
-
-
-def _user_shell_name() -> str:
-    """Determine user's preferred shell — $SHELL first, then /etc/passwd."""
-    shell_env = os.environ.get("SHELL", "")
-    if shell_env:
-        return Path(shell_env).name
-    try:
-        import pwd
-
-        return Path(pwd.getpwuid(os.getuid()).pw_shell).name
-    except (KeyError, OSError):
-        return ""
-
-
-def _resolve_shell() -> str:
-    """Pick a shell binary. Prefer the user's shell by basename, look in
-    $SNAP/bin and $SNAP/usr/bin first (apt's `zsh` lands at $SNAP/bin/zsh
-    while bash sits at $SNAP/usr/bin/bash), then /bin and /usr/bin."""
-    snap = os.environ.get("SNAP", "")
-    name = _user_shell_name()
-
-    candidates: list[str] = []
-    if name:
-        candidates += [
-            f"{snap}/bin/{name}",
-            f"{snap}/usr/bin/{name}",
-            f"/bin/{name}",
-            f"/usr/bin/{name}",
-        ]
-    # Fallback chain when the requested shell is not packaged
-    candidates += [
-        f"{snap}/bin/zsh",
-        f"{snap}/usr/bin/zsh",
-        f"{snap}/bin/bash",
-        f"{snap}/usr/bin/bash",
-        "/bin/zsh", "/usr/bin/zsh",
-        "/bin/bash", "/usr/bin/bash",
-        "/bin/sh",
-    ]
-    for path in candidates:
-        if path and Path(path).exists():
-            log.info("terminal shell: %s (preferred basename: %r)", path, name)
-            return path
-    return "/bin/sh"
 
 
 class _TerminalTab(Gtk.ScrolledWindow):
@@ -86,8 +42,8 @@ class _TerminalTab(Gtk.ScrolledWindow):
         if self._spawned:
             return
         self._spawned = True
-        shell = _resolve_shell()
-        env = [f"{k}={v}" for k, v in os.environ.items()]
+        shell = resolve_shell()
+        env = spawn_env(shell)
         try:
             self.terminal.spawn_async(
                 Vte.PtyFlags.DEFAULT,

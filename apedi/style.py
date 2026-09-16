@@ -30,6 +30,11 @@ _CSS = b"""
 .file-archive { color: #f59e0b; }
 .file-other { /* default */ }
 
+/* Git state - listed after the per-extension colours so it wins over them */
+label.git-added    { color: #2e9e5b; }
+label.git-modified { color: #c8931b; }
+label.git-conflict { color: #d64545; font-weight: bold; }
+
 /* Ignored entries (gitignore / heavy dirs / user patterns) */
 .file-ignored { opacity: 0.45; font-style: italic; }
 .file-heavy   { opacity: 0.55; }

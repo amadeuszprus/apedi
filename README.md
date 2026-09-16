@@ -20,6 +20,10 @@ project tree, integrated terminal, and a clean modern GTK 4 interface.
 - Go to Symbol in file (`Ctrl+M`) — Python / JS / TS / Rust / Go /
   Java / C / C++ / Ruby / shell
 - Integrated terminal (`Ctrl+\``) — VTE with bundled `bash` and `zsh`
+- Git awareness - change bars in the gutter (added / modified / removed
+  vs. the last commit, live as you type) and colours in the project tree
+  (modified, new, conflict), refreshed on save and after any commit,
+  checkout or stash
 - Auto-detect dark / light theme from the desktop preference, or pick
   one from Preferences
 - Search, replace (`Ctrl+R`), goto line (`Ctrl+G`)

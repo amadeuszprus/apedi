@@ -73,6 +73,7 @@ class Settings:
     markdown_split_ratio: float = DEFAULT_SPLIT_RATIO
     show_minimap: bool = False
     restore_session: bool = True
+    show_git_changes: bool = True
 
     @classmethod
     def load(cls, path: Path = CONFIG_PATH) -> "Settings":

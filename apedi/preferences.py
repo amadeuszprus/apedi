@@ -110,6 +110,9 @@ class PreferencesDialog(Gtk.Window):
 
         self.md_preview_switch = self._switch(self.settings.markdown_preview_auto)
         page.add(_("Markdown preview (auto-open for .md)"), self.md_preview_switch)
+
+        self.git_switch = self._switch(self.settings.show_git_changes)
+        page.add(_("Git changes (gutter bars and sidebar colours)"), self.git_switch)
         return page.grid
 
     def _build_files_page(self) -> Gtk.Widget:
@@ -242,6 +245,7 @@ class PreferencesDialog(Gtk.Window):
             self.settings.trim_trailing_whitespace = self.trim_switch.get_active()
             self.settings.show_minimap = self.minimap_switch.get_active()
             self.settings.markdown_preview_auto = self.md_preview_switch.get_active()
+            self.settings.show_git_changes = self.git_switch.get_active()
 
             self.settings.show_sidebar = self.sidebar_switch.get_active()
             self.settings.sidebar_compact = self.compact_switch.get_active()

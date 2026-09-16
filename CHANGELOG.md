@@ -3,6 +3,44 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.17] - 2026-09-14
+
+### Added
+- **Git change bars in the gutter.** A thin bar between the line numbers
+  and the text shows how the buffer differs from the last commit: green
+  for added lines, amber for changed ones, and a short red mark above
+  the line a block was removed from. It follows your typing as you go,
+  not just what is saved, so you see the change before you save it. A
+  file that is not in git yet shows nothing.
+- **Git colours in the project tree.** Modified files turn amber, new
+  and untracked ones green, and a merge conflict red. Folders take the
+  strongest state of anything below them, so a change three levels deep
+  still shows on the folder you can see. Colours refresh when you save,
+  and also on their own after a commit, checkout or stash made in the
+  terminal - the `.git` directory is watched, so nothing has to be
+  clicked.
+- **Preferences → Editor → Git changes** switches both off in one go.
+  Everything is on by default; without git on the machine there is no
+  colouring and no complaint.
+- **The snap now bundles git**, because strict confinement hides the
+  one on the host.
+
+### Fixed
+- **The integrated terminal opens your login shell again.** Inside the
+  snap, snapd exports `SHELL=/bin/bash` regardless of what you use, and
+  the terminal trusted that variable over `/etc/passwd` - so zsh users
+  got bash. The passwd entry now wins, and the shell that is started is
+  also what `$SHELL` says inside the terminal.
+- **Expanding a folder no longer freezes the editor.** GTK asks for a
+  folder's children just to decide whether to draw an expander arrow, so
+  every folder row that came into view was listed eagerly - one click on
+  a project root with fifty subfolders read all fifty, on the main thread,
+  before anything was drawn (1.5 s on a mid-sized repository). Folders are
+  now listed only when actually expanded, in the background, with a
+  spinner row standing in until the entries arrive; the click itself
+  takes a few milliseconds. The per-entry `.gitignore` and git-state
+  lookups also stopped resolving every path twice.
+
 ## [0.7.16] - 2026-09-07
 
 ### Added

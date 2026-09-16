@@ -44,16 +44,23 @@ class IgnoreFilter:
                 log.debug("cannot read %s: %s", gitignore, e)
         return pathspec.PathSpec.from_lines("gitwildmatch", patterns) if patterns else None
 
-    def is_ignored(self, path: Path) -> bool:
-        try:
-            rel = path.resolve().relative_to(self.root)
-        except (ValueError, OSError):
+    def is_ignored(self, path: Path, is_dir: bool | None = None) -> bool:
+        """Whether `path` matches the patterns; pass `is_dir` to skip the stat."""
+        if self._spec is None:
             return False
-        if self._spec is not None and self._spec.match_file(str(rel)):
+        try:
+            rel = path.relative_to(self.root)
+        except ValueError:
+            try:
+                rel = path.resolve().relative_to(self.root)
+            except (ValueError, OSError):
+                return False
+        if self._spec.match_file(str(rel)):
             return True
-        if self._spec is not None and path.is_dir():
-            if self._spec.match_file(str(rel) + "/"):
-                return True
+        if is_dir is None:
+            is_dir = path.is_dir()
+        if is_dir and self._spec.match_file(str(rel) + "/"):
+            return True
         return False
 
     def is_heavy(self, path: Path) -> bool:

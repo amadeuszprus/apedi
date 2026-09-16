@@ -29,7 +29,7 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.16'
+version: '0.7.17'
 icon: data/apedi-icon-512.png
 contact: aprus@codesty.pl
 donation: https://ko-fi.com/aprus
@@ -75,6 +75,9 @@ parts:
       - libvte-2.91-gtk4-0
       - bash
       - zsh
+      # Sidebar colours and the change gutter shell out to git; strict
+      # confinement hides the host's copy, so ship one.
+      - git
     override-stage: |
       craftctl default
       # Strip system locales we don't ship UI translations for. Apedi's own
@@ -92,6 +95,19 @@ parts:
       - -usr/lib/x86_64-linux-gnu/libdconf*
       - -usr/lib/x86_64-linux-gnu/libicuio*
       - -usr/lib/x86_64-linux-gnu/libicutest*
+      # git pulls perl in for add--interactive, send-email and friends;
+      # status / show / rev-parse are builtins and never touch it.
+      - -usr/bin/perl*
+      - -usr/lib/x86_64-linux-gnu/perl*
+      - -usr/share/perl*
+      - -usr/lib/git-core/git-add--interactive
+      - -usr/lib/git-core/git-send-email
+      - -usr/lib/git-core/git-svn
+      - -usr/lib/git-core/git-cvsserver
+      - -usr/lib/git-core/mergetools
+      - -usr/share/git-core/templates
+      - -usr/share/git-core/contrib
+      - -usr/share/bash-completion/completions/git
 
   formatters-apt:
     plugin: nil

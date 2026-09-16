@@ -18,8 +18,9 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("GtkSource", "5")
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk, GtkSource  # noqa: E402
 
-from . import file_io, recent, theming
+from . import file_io, gitstate, recent, theming
 from .buffer import EditorBuffer
+from .git_gutter import GUTTER_POSITION, ChangeGutterRenderer, GitTracker
 from .settings import Settings, clamp_split_ratio
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,9 @@ log = logging.getLogger(__name__)
 # Debounce for persisting a dragged markdown split — the handle emits a
 # position change per pixel, and each save rewrites config.toml.
 SPLIT_SAVE_DELAY_MS = 500
+
+# Debounce for re-diffing the buffer against HEAD after a keystroke.
+GIT_MARKS_DELAY_MS = 300
 
 
 def _likely_snap_confinement_block(path: Path) -> bool:
@@ -61,6 +65,14 @@ class EditorTab(Gtk.Paned):
         self.buffer = buffer
         self.view = GtkSource.View.new_with_buffer(buffer)
         self._wire_selection_menu()
+        self._change_renderer = ChangeGutterRenderer()
+        self.view.get_gutter(Gtk.TextWindowType.LEFT).insert(
+            self._change_renderer, GUTTER_POSITION,
+        )
+        self._git_baseline: str | None = None
+        self._git_marks_timer_id: int | None = None
+        self._git_marks_enabled: bool = True
+        buffer.connect("changed", lambda *_: self._schedule_git_marks())
         self._editor_scroll = Gtk.ScrolledWindow()
         self._editor_scroll.set_hexpand(True)
         self._editor_scroll.set_vexpand(True)
@@ -96,6 +108,38 @@ class EditorTab(Gtk.Paned):
         self.on_external_change: Callable[[Path], None] | None = None
         buffer.connect("notify::path-str", lambda *_: self._rewire_monitor())
         self._rewire_monitor()
+
+    # ---------- git change bars ----------
+
+    def set_git_baseline(self, text: str | None) -> None:
+        """HEAD's copy of this file, or None; the gutter diffs the buffer against it."""
+        self._git_baseline = text
+        self._cancel_git_marks()
+        self._recompute_git_marks()
+
+    def _schedule_git_marks(self) -> None:
+        if not self._git_marks_enabled or self._git_baseline is None:
+            return
+        self._cancel_git_marks()
+        self._git_marks_timer_id = GLib.timeout_add(GIT_MARKS_DELAY_MS, self._git_marks_fire)
+
+    def _cancel_git_marks(self) -> None:
+        if self._git_marks_timer_id is not None:
+            GLib.source_remove(self._git_marks_timer_id)
+            self._git_marks_timer_id = None
+
+    def _git_marks_fire(self) -> bool:
+        self._git_marks_timer_id = None
+        self._recompute_git_marks()
+        return False
+
+    def _recompute_git_marks(self) -> None:
+        if not self._git_marks_enabled or self._git_baseline is None:
+            self._change_renderer.set_marks(gitstate.EMPTY_MARKS)
+            return
+        self._change_renderer.set_marks(
+            gitstate.line_marks(self._git_baseline, self.buffer.get_full_text())
+        )
 
     def _wire_selection_menu(self) -> None:
         """Offer Normalize Whitespace in the right-click menu, but only while
@@ -171,6 +215,11 @@ class EditorTab(Gtk.Paned):
         self._preview_dark = theming.is_dark_scheme(s.color_scheme or "", self._scheme_variants())
         if self.preview is not None and hasattr(self.preview, "set_dark"):
             self.preview.set_dark(self._preview_dark)
+        self._change_renderer.set_dark(self._preview_dark)
+        self._change_renderer.set_visible(s.show_git_changes)
+        if self._git_marks_enabled != s.show_git_changes:
+            self._git_marks_enabled = s.show_git_changes
+            self._recompute_git_marks()
         ratio = clamp_split_ratio(s.markdown_split_ratio)
         if ratio != self._split_ratio:
             self._split_ratio = ratio
@@ -329,6 +378,8 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.settings = settings
         self._deferred_init_done = False
         self.set_title("Apedi")
+        self._git = GitTracker()
+        self._git.on_repo_changed = self._on_repo_changed
         self._build_ui()
         self._setup_actions()
         self._setup_drop_target()
@@ -474,6 +525,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.sidebar = ProjectSidebar(self._sidebar_open_file)
         self.sidebar.on_close_project = self._sidebar_close_project
         self.sidebar.on_context_action = self._dispatch_sidebar_action
+        self.sidebar.on_projects_changed = self._refresh_git_status
         self.paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         self.paned.set_position(240)
         self.paned.set_shrink_start_child(False)
@@ -685,12 +737,60 @@ class EditorWindow(Gtk.ApplicationWindow):
         buffer.connect("changed", lambda *_: self._draft_bump(tab))
         buffer.connect("changed", lambda *_: tab.bump_preview())
         buffer.connect("notify::path-str", lambda *_: self._maybe_auto_preview(tab))
+        buffer.connect("notify::path-str", lambda *_: self._refresh_git_tab(tab))
         tab.on_external_change = self._on_buffer_external_change
         tab.on_open_path = self.open_path
         tab.on_split_ratio_changed = self._on_split_ratio_changed
         tab.view.grab_focus()
         self._maybe_auto_preview(tab)
+        self._refresh_git_tab(tab)
         return tab
+
+    # ---------- git decorations ----------
+
+    def _refresh_git_status(self, project: Path | None = None) -> None:
+        """Re-run `git status` for one project, or for all of them."""
+        if not self.settings.show_git_changes:
+            return
+        projects = [project] if project is not None else self.sidebar.projects()
+        for proj in projects:
+            self._git.refresh_status(proj, self.sidebar.set_git_status)
+
+    def _refresh_git_status_for(self, path: Path) -> None:
+        proj = self.sidebar.project_for(path)
+        if proj is not None:
+            self._refresh_git_status(proj)
+
+    def _refresh_git_tab(self, tab: EditorTab) -> None:
+        """Fetch HEAD's copy of the tab's file so the gutter can diff against it."""
+        if not self.settings.show_git_changes or not tab.buffer.path:
+            tab.set_git_baseline(None)
+            return
+        path = tab.buffer.path
+
+        def deliver(text: str | None) -> None:
+            # The tab may have moved on to another file meanwhile.
+            if tab.buffer.path == path:
+                tab.set_git_baseline(text)
+
+        self._git.fetch_baseline(path, tab.buffer.encoding, deliver)
+
+    def _on_repo_changed(self) -> None:
+        """A commit, checkout or stash landed, so colours and baselines may be stale."""
+        self._refresh_git_status()
+        for tab in self.all_tabs():
+            self._refresh_git_tab(tab)
+
+    def _apply_git_decorations(self) -> None:
+        if self.settings.show_git_changes:
+            self._refresh_git_status()
+            for tab in self.all_tabs():
+                self._refresh_git_tab(tab)
+        else:
+            self._git.clear()
+            self.sidebar.clear_git_status()
+            for tab in self.all_tabs():
+                tab.set_git_baseline(None)
 
     def _on_split_ratio_changed(self, ratio: float) -> None:
         """A markdown split was dragged — remember it for the next preview."""
@@ -936,6 +1036,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         recent.save(recent.add(path))
         self.get_application().notify_recent_changed()
         self._set_status(f"Saved {path.name}")
+        self._refresh_git_status_for(path)
         return True
 
     def action_close_tab(self, *_args: object) -> None:
@@ -1479,6 +1580,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         so pass a directory whenever you know which one changed."""
         if directory is not None:
             self.sidebar.refresh_dir(directory)
+            self._refresh_git_status_for(directory)
             return
         self.sidebar.set_projects(
             self.sidebar.projects(), list(self.settings.ignore_patterns),
@@ -1725,6 +1827,7 @@ class EditorWindow(Gtk.ApplicationWindow):
             tab._apply_settings(settings)
         self._apply_sidebar_visibility()
         self._apply_terminal_visibility()
+        self._apply_git_decorations()
         self._cancel_autosave()
         self._update_status()
 
