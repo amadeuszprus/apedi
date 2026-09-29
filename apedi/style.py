@@ -35,6 +35,10 @@ label.git-added    { color: #2e9e5b; }
 label.git-modified { color: #c8931b; }
 label.git-conflict { color: #d64545; font-weight: bold; }
 
+/* Split editor - the group without focus mutes its selected tab */
+notebook.apedi-group-inactive > header > tabs > tab:checked { box-shadow: none; }
+notebook.apedi-group-inactive > header > tabs > tab:checked label { opacity: 0.6; }
+
 /* Ignored entries (gitignore / heavy dirs / user patterns) */
 .file-ignored { opacity: 0.45; font-style: italic; }
 .file-heavy   { opacity: 0.55; }

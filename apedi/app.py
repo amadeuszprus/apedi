@@ -193,7 +193,9 @@ class EditorApp(Gtk.Application):
                 path = Path(tabinfo.get("path", ""))
                 if not path.is_file():
                     continue
-                if not window.open_path(path):
+                group = tabinfo.get("group", 0)
+                window.use_group(group if isinstance(group, int) and group in (0, 1) else 0)
+                if not window.open_path(path, here=True):
                     continue
                 cursor = tabinfo.get("cursor")
                 tab = window.current_tab()
@@ -203,9 +205,13 @@ class EditorApp(Gtk.Application):
                     it = buf.get_iter_at_offset(max(0, min(cursor, n)))
                     buf.place_cursor(it)
                     GLib.idle_add(self._scroll_to_cursor, tab)
-            active = state.get("active", 0)
-            if isinstance(active, int) and 0 <= active < window.notebook.get_n_pages():
-                window.notebook.set_current_page(active)
+            window.tidy_groups()
+            pages = state.get("group_pages") or [state.get("active", 0)]
+            for group, page in enumerate(pages):
+                if isinstance(page, int):
+                    window.select_page(group, page)
+            active_group = state.get("active_group", 0)
+            window.use_group(active_group if active_group in (0, 1) else 0)
         except Exception:
             log.exception("session restore failed")
         return False

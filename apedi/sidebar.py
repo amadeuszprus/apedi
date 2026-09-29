@@ -16,6 +16,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gdk, GLib, GObject, Gio, Gtk  # noqa: E402
 
+from .browser import is_html_path
 from .gitstate import RepoStatus
 from .ignore_filter import IgnoreFilter
 
@@ -609,6 +610,9 @@ class ProjectSidebar(Gtk.Box):
         add_separator()
         add_button(_("Rename…"), "rename")
         add_separator()
+        if not is_dir and is_html_path(path):
+            add_button(_("Open in Browser"), "open-in-browser")
+            add_separator()
         add_button(_("Find in {scope}…").format(scope=scope_label), "find")
         add_button(_("Replace in {scope}…").format(scope=scope_label), "replace")
         add_button(_("Replace with…"), "replace-with")

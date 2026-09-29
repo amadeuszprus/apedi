@@ -102,6 +102,9 @@ class PreferencesDialog(Gtk.Window):
         self.autoindent_switch = self._switch(self.settings.auto_indent)
         page.add(_("Auto indent"), self.autoindent_switch)
 
+        self.autoclose_switch = self._switch(self.settings.auto_close_brackets)
+        page.add(_("Auto-close brackets and quotes"), self.autoclose_switch)
+
         self.trim_switch = self._switch(self.settings.trim_trailing_whitespace)
         page.add(_("Trim trailing whitespace on save"), self.trim_switch)
 
@@ -110,6 +113,9 @@ class PreferencesDialog(Gtk.Window):
 
         self.md_preview_switch = self._switch(self.settings.markdown_preview_auto)
         page.add(_("Markdown preview (auto-open for .md)"), self.md_preview_switch)
+
+        self.outline_switch = self._switch(self.settings.show_outline)
+        page.add(_("Markdown outline in the sidebar"), self.outline_switch)
 
         self.git_switch = self._switch(self.settings.show_git_changes)
         page.add(_("Git changes (gutter bars and sidebar colours)"), self.git_switch)
@@ -242,9 +248,11 @@ class PreferencesDialog(Gtk.Window):
             self.settings.wrap_lines = self.wrap_switch.get_active()
             self.settings.show_line_numbers = self.lineno_switch.get_active()
             self.settings.auto_indent = self.autoindent_switch.get_active()
+            self.settings.auto_close_brackets = self.autoclose_switch.get_active()
             self.settings.trim_trailing_whitespace = self.trim_switch.get_active()
             self.settings.show_minimap = self.minimap_switch.get_active()
             self.settings.markdown_preview_auto = self.md_preview_switch.get_active()
+            self.settings.show_outline = self.outline_switch.get_active()
             self.settings.show_git_changes = self.git_switch.get_active()
 
             self.settings.show_sidebar = self.sidebar_switch.get_active()

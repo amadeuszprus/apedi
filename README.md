@@ -18,7 +18,12 @@ project tree, integrated terminal, and a clean modern GTK 4 interface.
 - Quick Open (`Ctrl+P`) — fuzzy file picker across all open projects
 - Find in Files (`Ctrl+Shift+F`) — workspace-wide text search
 - Go to Symbol in file (`Ctrl+M`) — Python / JS / TS / Rust / Go /
-  Java / C / C++ / Ruby / shell
+  Java / C / C++ / Ruby / PHP / shell
+- Go to Symbol in Project (`Ctrl+Shift+R`) across every open project
+- Split editor (`Ctrl+\`) with two tab groups
+- Replace in Files (`Ctrl+Shift+H`) with a per-match preview
+- Tasks (`Ctrl+Shift+B`) from Makefile, npm, Composer and `.apedi/tasks.toml`
+- Markdown outline, inline images and HTML / PDF export
 - Integrated terminal (`Ctrl+\``) — VTE with bundled `bash` and `zsh`
 - Git awareness - change bars in the gutter (added / modified / removed
   vs. the last commit, live as you type) and colours in the project tree
@@ -67,8 +72,14 @@ sudo snap install --dangerous ./apedi_*.snap
 | `Ctrl+R`             | Replace                         |
 | `Ctrl+G`             | Goto line                       |
 | `Ctrl+M`             | Goto symbol in file             |
+| `Ctrl+Shift+R`       | Goto symbol in project          |
+| `Ctrl+/`             | Toggle comment                  |
+| `Ctrl+D`             | Select next occurrence          |
+| `Ctrl+\`             | Split editor                    |
 | `Ctrl+P`             | Quick Open file                 |
 | `Ctrl+Shift+F`       | Find in Files                   |
+| `Ctrl+Shift+H`       | Replace in Files                |
+| `Ctrl+Shift+B`       | Run task                        |
 | `Ctrl+Shift+I`       | Format current file             |
 | `Ctrl+,`             | Preferences                     |
 | `Ctrl+Shift+D`       | Toggle light / dark theme       |

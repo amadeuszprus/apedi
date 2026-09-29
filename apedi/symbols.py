@@ -38,6 +38,9 @@ def _python_symbols(text: str) -> list[Symbol]:
     except SyntaxError:
         # Fall back to regex on malformed source
         return _regex_symbols(text, _LANG_REGEX["python"])
+    for parent in ast.walk(tree):
+        for child in ast.iter_child_nodes(parent):
+            child._apedi_parent = parent  # type: ignore[attr-defined]
     out: list[Symbol] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.ClassDef):
@@ -82,6 +85,11 @@ _LANG_REGEX: dict[str, re.Pattern[str]] = {
         re.MULTILINE,
     ),
     "ruby": re.compile(r"^\s*(class|def|module)\s+([A-Za-z_][\w?!]*)", re.MULTILINE),
+    "php": re.compile(
+        r"^\s*(?:(?:abstract|final|readonly|public|protected|private|static)\s+)*"
+        r"(class|interface|trait|enum|function)\s+&?(\w+)",
+        re.MULTILINE,
+    ),
     "sh": re.compile(r"^\s*(?:function\s+)?(\w+)\s*\(\)\s*\{", re.MULTILINE),
     "bash": re.compile(r"^\s*(?:function\s+)?(\w+)\s*\(\)\s*\{", re.MULTILINE),
 }
@@ -193,6 +201,7 @@ class SymbolPaletteDialog(Gtk.Window):
         line_label.set_text(f"{sym.line}")
 
     def _refresh(self, query: str) -> None:
+        self._shown_query = query
         q = query.lower()
         self.store.remove_all()
         for sym in self._all_symbols:
@@ -239,6 +248,9 @@ class SymbolPaletteDialog(Gtk.Window):
         return False
 
     def _activate_selected(self) -> None:
+        # Enter can beat the entry's search delay; filter first so the visible pick is the right one.
+        if self.entry.get_text() != getattr(self, "_shown_query", None):
+            self._refresh(self.entry.get_text())
         idx = self.selection.get_selected()
         if idx == Gtk.INVALID_LIST_POSITION:
             return

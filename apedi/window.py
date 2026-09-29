@@ -18,7 +18,7 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("GtkSource", "5")
 from gi.repository import Gdk, Gio, GLib, GObject, Gtk, GtkSource  # noqa: E402
 
-from . import file_io, gitstate, recent, theming
+from . import APP_ID, browser, edit_commands, file_io, gitstate, recent, theming
 from .buffer import EditorBuffer
 from .git_gutter import GUTTER_POSITION, ChangeGutterRenderer, GitTracker
 from .settings import Settings, clamp_split_ratio
@@ -63,8 +63,11 @@ class EditorTab(Gtk.Paned):
         self.set_vexpand(True)
         self.set_wide_handle(True)
         self.buffer = buffer
+        self._buffer_handlers: list[int] = []
         self.view = GtkSource.View.new_with_buffer(buffer)
         self._wire_selection_menu()
+        self._auto_pairs_enabled = settings.auto_close_brackets
+        self._auto_pairs = edit_commands.AutoPairs(self.view, lambda: self._auto_pairs_enabled)
         self._change_renderer = ChangeGutterRenderer()
         self.view.get_gutter(Gtk.TextWindowType.LEFT).insert(
             self._change_renderer, GUTTER_POSITION,
@@ -72,7 +75,7 @@ class EditorTab(Gtk.Paned):
         self._git_baseline: str | None = None
         self._git_marks_timer_id: int | None = None
         self._git_marks_enabled: bool = True
-        buffer.connect("changed", lambda *_: self._schedule_git_marks())
+        self.connect_buffer("changed", lambda *_: self._schedule_git_marks())
         self._editor_scroll = Gtk.ScrolledWindow()
         self._editor_scroll.set_hexpand(True)
         self._editor_scroll.set_vexpand(True)
@@ -106,8 +109,32 @@ class EditorTab(Gtk.Paned):
         self.search_context = GtkSource.SearchContext.new(buffer, self.search_settings)
         self._monitor: Gio.FileMonitor | None = None
         self.on_external_change: Callable[[Path], None] | None = None
-        buffer.connect("notify::path-str", lambda *_: self._rewire_monitor())
+        self.connect_buffer("notify::path-str", lambda *_: self._rewire_monitor())
         self._rewire_monitor()
+
+    def connect_buffer(self, signal: str, callback: Callable[..., object]) -> None:
+        """Connect to the buffer and remember it, so release() can detach this view."""
+        self._buffer_handlers.append(self.buffer.connect(signal, callback))
+
+    def release(self) -> None:
+        """Detach a closed view from its buffer, which a view in the other group may keep alive."""
+        for handler in self._buffer_handlers:
+            self.buffer.disconnect(handler)
+        self._buffer_handlers.clear()
+        self._cancel_git_marks()
+        self.search_context.set_highlight(False)
+        if self._monitor is not None:
+            self._monitor.cancel()
+            self._monitor = None
+
+    def reveal_cursor(self) -> None:
+        """Scroll the cursor into view once the text view has measured every line."""
+        # Line heights are validated in higher-priority idles, so a low-priority one runs after them.
+        GLib.idle_add(self._scroll_to_cursor, priority=GLib.PRIORITY_LOW)
+
+    def _scroll_to_cursor(self) -> bool:
+        self.view.scroll_to_mark(self.buffer.get_insert(), 0.2, True, 0.0, 0.5)
+        return False
 
     # ---------- git change bars ----------
 
@@ -142,18 +169,34 @@ class EditorTab(Gtk.Paned):
         )
 
     def _wire_selection_menu(self) -> None:
-        """Offer Normalize Whitespace in the right-click menu, but only while
-        something is selected — that is the scope the command acts on."""
+        """Right-click menu: the split commands always, Normalize Whitespace only
+        while something is selected, since that is the scope it acts on."""
+        self._selection_menu = Gio.Menu()
+        self._html_menu = Gio.Menu()
+        split_menu = Gio.Menu()
+        split_menu.append(_("Split Editor"), "win.split-editor")
+        split_menu.append(_("Move Tab to Other Group"), "win.move-to-other-group")
+        split_menu.append(_("Join Editor Groups"), "win.join-groups")
         menu = Gio.Menu()
-        menu.append(_("Normalize Whitespace"), "win.normalize")
-        self._selection_menu = menu
+        menu.append_section(None, self._selection_menu)
+        menu.append_section(None, self._html_menu)
+        menu.append_section(None, split_menu)
+        self.view.set_extra_menu(menu)
 
         def sync(*_args: object) -> None:
-            has_selection = self.buffer.get_has_selection()
-            self.view.set_extra_menu(menu if has_selection else None)
+            self._selection_menu.remove_all()
+            if self.buffer.get_has_selection():
+                self._selection_menu.append(_("Normalize Whitespace"), "win.normalize")
 
-        self.buffer.connect("notify::has-selection", sync)
+        def sync_html(*_args: object) -> None:
+            self._html_menu.remove_all()
+            if browser.is_html_path(self.buffer.path):
+                self._html_menu.append(_("Open in Browser"), "win.open-in-browser")
+
+        self.connect_buffer("notify::has-selection", sync)
+        self.connect_buffer("notify::path-str", sync_html)
         sync()
+        sync_html()
 
     def _rewire_monitor(self) -> None:
         if self._monitor is not None:
@@ -192,6 +235,7 @@ class EditorTab(Gtk.Paned):
         self.view.set_tab_width(s.tab_width)
         self.view.set_indent_width(s.tab_width)
         self.view.set_insert_spaces_instead_of_tabs(s.use_spaces)
+        self._auto_pairs_enabled = s.auto_close_brackets
         self.view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR if s.wrap_lines else Gtk.WrapMode.NONE)
         # Wrapped text never overflows, so pin the horizontal scrollbar off
         # rather than leaving it to the scrolled window's automatic policy.
@@ -459,17 +503,39 @@ class EditorWindow(Gtk.ApplicationWindow):
         edit_menu.append(_("Quick Open…"), "win.quick-open")
         edit_menu.append(_("Find…"), "win.find")
         edit_menu.append(_("Find in Files…"), "win.find-in-files")
+        edit_menu.append(_("Replace in Files…"), "win.replace-in-files")
         edit_menu.append(_("Replace…"), "win.replace")
         edit_menu.append(_("Go to Line…"), "win.goto-line")
         edit_menu.append(_("Go to Symbol…"), "win.symbols")
+        edit_menu.append(_("Go to Symbol in Project…"), "win.project-symbols")
         edit_menu.append(_("Format Code"), "win.format")
         edit_menu.append(_("Normalize Whitespace"), "win.normalize")
 
+        lines_menu = Gio.Menu()
+        lines_menu.append(_("Toggle Comment"), "win.toggle-comment")
+        lines_menu.append(_("Duplicate Line Down"), "win.duplicate-down")
+        lines_menu.append(_("Duplicate Line Up"), "win.duplicate-up")
+        lines_menu.append(_("Move Line Up"), "win.move-line-up")
+        lines_menu.append(_("Move Line Down"), "win.move-line-down")
+        lines_menu.append(_("Select Next Occurrence"), "win.select-next")
+        lines_menu.append(_("Go to Matching Bracket"), "win.jump-bracket")
+        edit_menu.append_section(None, lines_menu)
+
         view_menu = Gio.Menu()
+        split_menu = Gio.Menu()
+        split_menu.append(_("Split Editor"), "win.split-editor")
+        split_menu.append(_("Move Tab to Other Group"), "win.move-to-other-group")
+        split_menu.append(_("Join Editor Groups"), "win.join-groups")
+        view_menu.append_section(None, split_menu)
         view_menu.append(_("Toggle Sidebar"), "win.toggle-sidebar")
         view_menu.append(_("Toggle Terminal"), "win.toggle-terminal")
         view_menu.append(_("New Terminal"), "win.new-terminal")
+        view_menu.append(_("Run Task…"), "win.run-task")
+        view_menu.append(_("Run Last Task"), "win.rerun-task")
         view_menu.append(_("Toggle Markdown Preview"), "win.toggle-preview")
+        view_menu.append(_("Toggle Markdown Outline"), "win.toggle-outline")
+        view_menu.append(_("Export Markdown as HTML…"), "win.export-html")
+        view_menu.append(_("Export Markdown as PDF…"), "win.export-pdf")
         view_menu.append(_("Toggle Word Wrap"), "win.toggle-wrap")
         view_menu.append(_("Toggle Line Numbers"), "win.toggle-line-numbers")
         view_menu.append(_("Toggle Minimap"), "win.toggle-minimap")
@@ -516,11 +582,15 @@ class EditorWindow(Gtk.ApplicationWindow):
         vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         vbox.append(self._build_search_bar())
 
-        self.notebook = Gtk.Notebook()
-        self.notebook.set_scrollable(True)
-        self.notebook.set_hexpand(True)
-        self.notebook.set_vexpand(True)
-        self.notebook.connect("switch-page", self._on_switch_page)
+        self._notebooks: list[Gtk.Notebook] = []
+        self._active_nb = self._new_notebook()
+        self.editor_paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        self.editor_paned.set_wide_handle(True)
+        self.editor_paned.set_hexpand(True)
+        self.editor_paned.set_vexpand(True)
+        self.editor_paned.set_shrink_start_child(False)
+        self.editor_paned.set_shrink_end_child(False)
+        self.editor_paned.set_start_child(self._active_nb)
 
         self.sidebar = ProjectSidebar(self._sidebar_open_file)
         self.sidebar.on_close_project = self._sidebar_close_project
@@ -530,8 +600,19 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.paned.set_position(240)
         self.paned.set_shrink_start_child(False)
         self.paned.set_resize_start_child(False)
-        self.paned.set_start_child(self.sidebar)
-        self.paned.set_end_child(self.notebook)
+        from .outline import OutlinePanel
+
+        self.outline = OutlinePanel(self._outline_jump)
+        self.outline.set_size_request(-1, 150)
+        self.outline.set_visible(False)
+        self._outline_timer_id: int | None = None
+        self.sidebar_pane = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        self.sidebar_pane.set_start_child(self.sidebar)
+        self.sidebar_pane.set_end_child(self.outline)
+        self.sidebar_pane.set_resize_end_child(False)
+        self.sidebar_pane.set_shrink_end_child(False)
+        self.paned.set_start_child(self.sidebar_pane)
+        self.paned.set_end_child(self.editor_paned)
         self.paned.set_hexpand(True)
         self.paned.set_vexpand(True)
 
@@ -569,6 +650,9 @@ class EditorWindow(Gtk.ApplicationWindow):
         try:
             self.terminal_panel = self._build_terminal_panel()
             if self.terminal_panel is not None:
+                self.terminal_panel.attach_to_window(self)
+                self.terminal_panel.on_open_location = self._open_terminal_location
+                self.terminal_panel.on_empty = self._terminal_emptied
                 self.vpaned.set_end_child(self.terminal_panel)
                 self._apply_terminal_visibility()
             self._restore_last_project()
@@ -583,6 +667,45 @@ class EditorWindow(Gtk.ApplicationWindow):
             log.warning("terminal disabled — Vte unavailable: %s", e)
             return None
         return TerminalPanel()
+
+    def _open_terminal_location(self, text: str, bases: list[Path]) -> bool:
+        """Ctrl+click on `file:line` in the terminal opens that spot in the editor."""
+        from . import locations
+
+        loc = locations.parse(text)
+        if loc is None:
+            return False
+        path = locations.resolve(loc.path, [*bases, *self.sidebar.projects()])
+        if path is None:
+            self._set_status(_("No such file: {path}").format(path=loc.path))
+            return False
+        self.open_at(path, loc.line, loc.col)
+        return True
+
+    def _terminal_emptied(self) -> None:
+        """The last terminal exited, so the panel goes with it and focus returns to the editor."""
+        if self.settings.show_terminal:
+            self.settings.show_terminal = False
+            self.settings.save()
+        self._apply_terminal_visibility()
+        tab = self.current_tab()
+        if tab is not None:
+            tab.view.grab_focus()
+
+    def open_at(self, path: Path, line: int = 0, col: int = 0) -> None:
+        """Open `path` and put the cursor on a 1-based line and column when given."""
+        if not self.open_path(path):
+            return
+        tab = self.current_tab()
+        if tab is None or line <= 0:
+            return
+        buf = tab.buffer
+        target = buf.get_iter_at_line(min(line - 1, buf.get_line_count() - 1))[1]
+        if col > 1:
+            target.forward_chars(min(col - 1, max(0, target.get_chars_in_line() - 1)))
+        buf.place_cursor(target)
+        tab.reveal_cursor()
+        tab.view.grab_focus()
 
     def _apply_terminal_visibility(self) -> None:
         if self.terminal_panel is None:
@@ -607,7 +730,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.settings.save()
 
     def _apply_sidebar_visibility(self) -> None:
-        self.sidebar.set_visible(self.settings.show_sidebar)
+        self.sidebar_pane.set_visible(self.settings.show_sidebar)
         self.sidebar.set_compact(self.settings.sidebar_compact)
         self.sidebar.update_extra_patterns(list(self.settings.ignore_patterns))
 
@@ -669,6 +792,11 @@ class EditorWindow(Gtk.ApplicationWindow):
     def _setup_actions(self) -> None:
         defs = [
             ("new-tab", self.action_new_tab),
+            ("split-editor", self.action_split_editor),
+            ("join-groups", self.action_join_groups),
+            ("move-to-other-group", self.action_move_to_other_group),
+            ("focus-group-1", lambda *_: self._focus_group(0)),
+            ("focus-group-2", lambda *_: self._focus_group(1)),
             ("new-window", self.action_new_window),
             ("open", self.action_open),
             ("save", self.action_save),
@@ -682,7 +810,15 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("goto-line", self.action_goto_line),
             ("format", self.action_format),
             ("normalize", self.action_normalize),
+            ("toggle-comment", self.action_toggle_comment),
+            ("duplicate-down", lambda *_: self._edit(lambda t: edit_commands.duplicate(t.buffer, down=True))),
+            ("duplicate-up", lambda *_: self._edit(lambda t: edit_commands.duplicate(t.buffer, down=False))),
+            ("move-line-up", lambda *_: self._edit(lambda t: t.view.emit("move-lines", False))),
+            ("move-line-down", lambda *_: self._edit(lambda t: t.view.emit("move-lines", True))),
+            ("select-next", self.action_select_next),
+            ("jump-bracket", lambda *_: self._edit(lambda t: t.view.emit("move-to-matching-bracket", False))),
             ("open-backups", self.action_open_backups),
+            ("open-in-browser", self.action_open_in_browser),
             ("toggle-wrap", self.action_toggle_wrap),
             ("toggle-line-numbers", self.action_toggle_line_numbers),
             ("toggle-minimap", self.action_toggle_minimap),
@@ -693,7 +829,12 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("toggle-sidebar", self.action_toggle_sidebar),
             ("toggle-terminal", self.action_toggle_terminal),
             ("new-terminal", self.action_new_terminal),
+            ("run-task", self.action_run_task),
+            ("rerun-task", self.action_rerun_task),
             ("toggle-preview", self.action_toggle_preview),
+            ("toggle-outline", self.action_toggle_outline),
+            ("export-html", lambda *_: self._export_markdown("html")),
+            ("export-pdf", lambda *_: self._export_markdown("pdf")),
             ("sidebar-new-file", self.action_sidebar_new_file),
             ("sidebar-new-folder", self.action_sidebar_new_folder),
             ("sidebar-rename", self.action_sidebar_rename),
@@ -701,16 +842,24 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("sidebar-replace", self.action_sidebar_replace),
             ("sidebar-replace-with", self.action_sidebar_replace_with),
             ("symbols", self.action_symbols),
+            ("project-symbols", self.action_project_symbols),
             ("quick-open", self.action_quick_open),
             ("find-in-files", self.action_find_in_files),
+            ("replace-in-files", lambda *_: self.action_find_in_files(with_replace=True)),
             ("shortcuts", self.action_shortcuts),
         ]
         for name, cb in defs:
             action = Gio.SimpleAction.new(name, None)
             action.connect("activate", cb)
             self.add_action(action)
+        self._sync_split_actions()
 
     # ---------- Tab management ----------
+
+    @property
+    def notebook(self) -> Gtk.Notebook:
+        """The editor group that has focus; new tabs open here."""
+        return self._active_nb
 
     def current_tab(self) -> EditorTab | None:
         page = self.notebook.get_current_page()
@@ -719,25 +868,206 @@ class EditorWindow(Gtk.ApplicationWindow):
         return self.notebook.get_nth_page(page)  # type: ignore[return-value]
 
     def all_tabs(self) -> list[EditorTab]:
-        n = self.notebook.get_n_pages()
-        return [self.notebook.get_nth_page(i) for i in range(n)]  # type: ignore[misc]
+        return [tab for nb in self._notebooks for tab in self._tabs_in(nb)]
+
+    @staticmethod
+    def _tabs_in(nb: Gtk.Notebook) -> list[EditorTab]:
+        return [nb.get_nth_page(i) for i in range(nb.get_n_pages())]  # type: ignore[misc]
+
+    # ---------- editor groups (split view) ----------
+
+    def _new_notebook(self) -> Gtk.Notebook:
+        nb = Gtk.Notebook()
+        nb.set_scrollable(True)
+        nb.set_hexpand(True)
+        nb.set_vexpand(True)
+        # A shared group name lets tabs be dragged between the two groups.
+        nb.set_group_name("apedi-editors")
+        nb.connect("switch-page", self._on_switch_page)
+        nb.connect("page-added", self._on_page_added)
+        nb.connect("page-removed", self._on_page_removed)
+        self._notebooks.append(nb)
+        self._sync_split_actions()
+        return nb
+
+    def _notebook_of(self, tab: Gtk.Widget) -> Gtk.Notebook | None:
+        for nb in self._notebooks:
+            if nb.page_num(tab) >= 0:
+                return nb
+        return None
+
+    def is_split(self) -> bool:
+        return len(self._notebooks) > 1
+
+    def _set_active_notebook(self, nb: Gtk.Notebook | None) -> None:
+        if nb is None or nb not in self._notebooks:
+            return
+        changed = nb is not self._active_nb
+        self._active_nb = nb
+        for other in self._notebooks:
+            if self.is_split() and other is not nb:
+                other.add_css_class("apedi-group-inactive")
+            else:
+                other.remove_css_class("apedi-group-inactive")
+        if changed:
+            GLib.idle_add(self._update_status)
+            self._schedule_outline(0)
+            tab = self.current_tab()
+            if tab is not None and tab.buffer.path:
+                self.sidebar.reveal_file(tab.buffer.path)
+
+    def _focus_tab(self, tab: EditorTab) -> None:
+        nb = self._notebook_of(tab)
+        if nb is None:
+            return
+        self._set_active_notebook(nb)
+        nb.set_current_page(nb.page_num(tab))
+
+    def _other_group(self) -> Gtk.Notebook:
+        """The group next to the active one, created on demand."""
+        for nb in self._notebooks:
+            if nb is not self._active_nb:
+                return nb
+        nb = self._new_notebook()
+        self.editor_paned.set_end_child(nb)
+        width = self.editor_paned.get_width()
+        if width > 0:
+            self.editor_paned.set_position(width // 2)
+        return nb
+
+    def use_group(self, index: int) -> None:
+        """Make group `index` (0 left, 1 right) active, splitting if it does not exist yet."""
+        if index >= len(self._notebooks):
+            self._set_active_notebook(self._other_group())
+        else:
+            self._set_active_notebook(self._notebooks[index])
+
+    def select_page(self, group: int, page: int) -> None:
+        if 0 <= group < len(self._notebooks):
+            nb = self._notebooks[group]
+            if 0 <= page < nb.get_n_pages():
+                nb.set_current_page(page)
+
+    def tidy_groups(self) -> None:
+        for nb in list(self._notebooks):
+            self._drop_group_if_empty(nb)
+
+    def _on_page_added(self, nb: Gtk.Notebook, child: Gtk.Widget, _idx: int) -> None:
+        # A tab dragged across follows the user's attention into its new group.
+        nb.set_visible(True)
+        nb.set_tab_reorderable(child, True)
+        nb.set_tab_detachable(child, True)
+        self._set_active_notebook(nb)
+
+    def _on_page_removed(self, nb: Gtk.Notebook, _child: Gtk.Widget, _idx: int) -> None:
+        if self.is_split() and nb.get_n_pages() == 0:
+            # Hidden until dropped, since GTK mis-measures the header of a page-less notebook.
+            nb.set_visible(False)
+            GLib.idle_add(self._drop_group_if_empty, nb)
+
+    def _drop_group_if_empty(self, nb: Gtk.Notebook) -> bool:
+        if nb not in self._notebooks or nb.get_n_pages() > 0 or not self.is_split():
+            return False
+        self._notebooks.remove(nb)
+        self._sync_split_actions()
+        remaining = self._notebooks[0]
+        # Drop focus first, or the paned complains that its focus child vanished.
+        self.set_focus(None)
+        self.editor_paned.set_start_child(None)
+        self.editor_paned.set_end_child(None)
+        self.editor_paned.set_start_child(remaining)
+        if self._active_nb is nb:
+            self._active_nb = remaining
+        self._set_active_notebook(remaining)
+        tab = self.current_tab()
+        if tab is not None:
+            tab.view.grab_focus()
+        return False
+
+    def action_split_editor(self, *_args: object) -> None:
+        """Show the current file in the other group too, splitting the editor if needed."""
+        tab = self.current_tab()
+        target = self._other_group()
+        self._set_active_notebook(target)
+        if tab is None:
+            if target.get_n_pages() == 0:
+                self.add_tab()
+            return
+        twin = next((t for t in self._tabs_in(target) if t.buffer is tab.buffer), None)
+        if twin is not None:
+            self._focus_tab(twin)
+            twin.view.grab_focus()
+            return
+        self.add_tab(tab.buffer)
+
+    def action_move_to_other_group(self, *_args: object) -> None:
+        tab = self.current_tab()
+        if tab is None:
+            return
+        source = self.notebook
+        target = self._other_group()
+        twin = next((t for t in self._tabs_in(target) if t.buffer is tab.buffer), None)
+        source.remove_page(source.page_num(tab))
+        if twin is not None:
+            tab.release()
+            self._focus_tab(twin)
+            twin.view.grab_focus()
+            return
+        idx = target.append_page(tab, tab.label_box)
+        target.set_current_page(idx)
+        self._set_active_notebook(target)
+        tab.view.grab_focus()
+
+    def action_join_groups(self, *_args: object) -> None:
+        """Fold the right group back into the left one, dropping duplicate views."""
+        if not self.is_split():
+            return
+        left, right = self._notebooks
+        kept = {id(t.buffer) for t in self._tabs_in(left)}
+        for tab in self._tabs_in(right):
+            right.remove_page(right.page_num(tab))
+            if id(tab.buffer) in kept:
+                tab.release()
+                continue
+            left.append_page(tab, tab.label_box)
+            kept.add(id(tab.buffer))
+        self._set_active_notebook(left)
+
+    def _sync_split_actions(self) -> None:
+        """Grey out the commands that need a second group when there is none."""
+        for name in ("join-groups", "focus-group-2"):
+            action = self.lookup_action(name)
+            if action is not None:
+                action.set_enabled(self.is_split())
+
+    def _focus_group(self, index: int) -> None:
+        if index >= len(self._notebooks):
+            return
+        self._set_active_notebook(self._notebooks[index])
+        tab = self.current_tab()
+        if tab is not None:
+            tab.view.grab_focus()
 
     def add_tab(self, buffer: EditorBuffer | None = None) -> EditorTab:
         if buffer is None:
             buffer = EditorBuffer()
         tab = EditorTab(buffer, self.settings)
-        label = self._make_tab_label(tab)
-        idx = self.notebook.append_page(tab, label)
-        self.notebook.set_tab_reorderable(tab, True)
+        tab.label_box = self._make_tab_label(tab)
+        focus = Gtk.EventControllerFocus()
+        focus.connect("enter", lambda *_: self._set_active_notebook(self._notebook_of(tab)))
+        tab.add_controller(focus)
+        idx = self.notebook.append_page(tab, tab.label_box)
         self.notebook.set_current_page(idx)
-        buffer.connect("modified-changed", lambda *_: self._update_status())
-        buffer.connect("notify::language", lambda *_: self._update_status())
-        buffer.connect("notify::cursor-position", lambda *_: self._update_status())
-        buffer.connect("changed", lambda *_: self._autosave_bump())
-        buffer.connect("changed", lambda *_: self._draft_bump(tab))
-        buffer.connect("changed", lambda *_: tab.bump_preview())
-        buffer.connect("notify::path-str", lambda *_: self._maybe_auto_preview(tab))
-        buffer.connect("notify::path-str", lambda *_: self._refresh_git_tab(tab))
+        tab.connect_buffer("modified-changed", lambda *_: self._update_status())
+        tab.connect_buffer("notify::language", lambda *_: self._update_status())
+        tab.connect_buffer("notify::cursor-position", lambda *_: self._update_status())
+        tab.connect_buffer("changed", lambda *_: self._autosave_bump())
+        tab.connect_buffer("changed", lambda *_: self._draft_bump(tab))
+        tab.connect_buffer("changed", lambda *_: tab.bump_preview())
+        tab.connect_buffer("changed", lambda *_: self._schedule_outline())
+        tab.connect_buffer("notify::cursor-position", lambda *_: self._outline_follow_cursor(tab))
+        tab.connect_buffer("notify::path-str", lambda *_: self._maybe_auto_preview(tab))
+        tab.connect_buffer("notify::path-str", lambda *_: self._refresh_git_tab(tab))
         tab.on_external_change = self._on_buffer_external_change
         tab.on_open_path = self.open_path
         tab.on_split_ratio_changed = self._on_split_ratio_changed
@@ -831,17 +1161,23 @@ class EditorWindow(Gtk.ApplicationWindow):
             tooltip = str(tab.buffer.path) if tab.buffer.path else "Untitled"
             label.set_tooltip_text(tooltip)
 
-        tab.buffer.connect("notify::path-str", update)
-        tab.buffer.connect("modified-changed", update)
+        tab.connect_buffer("notify::path-str", update)
+        tab.connect_buffer("modified-changed", update)
         update()
         return box
 
-    def open_path(self, path: Path, *, allow_binary: bool = False, allow_large: bool = False) -> bool:
-        # Already open?
-        for tab in self.all_tabs():
-            if tab.buffer.path and tab.buffer.path.resolve() == path.resolve():
-                self.notebook.set_current_page(self.notebook.page_num(tab))
-                return True
+    def open_path(
+        self, path: Path, *, allow_binary: bool = False, allow_large: bool = False, here: bool = False,
+    ) -> bool:
+        """Open `path`, or switch to it if open; `here` adds a view in the active group instead."""
+        open_tabs = [t for t in self.all_tabs() if t.buffer.path and t.buffer.path.resolve() == path.resolve()]
+        if open_tabs:
+            local = [t for t in open_tabs if self._notebook_of(t) is self.notebook]
+            if local or not here:
+                self._focus_tab((local or open_tabs)[0])
+            else:
+                self.add_tab(open_tabs[0].buffer)
+            return True
 
         try:
             loaded = file_io.load_file(path, allow_binary=allow_binary, allow_large=allow_large)
@@ -1046,13 +1382,17 @@ class EditorWindow(Gtk.ApplicationWindow):
 
     def _close_specific_tab(self, tab: EditorTab) -> None:
         def really_close() -> None:
-            idx = self.notebook.page_num(tab)
-            if idx >= 0:
-                self.notebook.remove_page(idx)
-            if self.notebook.get_n_pages() == 0:
+            nb = self._notebook_of(tab)
+            if nb is None:
+                return
+            nb.remove_page(nb.page_num(tab))
+            tab.release()
+            if not self.is_split() and nb.get_n_pages() == 0:
                 self.add_tab()
 
-        if tab.buffer.get_modified():
+        # Another view still holds the edits, so closing this one loses nothing.
+        shared = any(t is not tab and t.buffer is tab.buffer for t in self.all_tabs())
+        if tab.buffer.get_modified() and not shared:
             self._confirm_save_async(tab, really_close)
         else:
             really_close()
@@ -1171,6 +1511,31 @@ class EditorWindow(Gtk.ApplicationWindow):
         tab.buffer.replace_text_preserving_cursor(formatted)
         self._set_status(f"Formatted ({lang_id})")
 
+    def _edit(self, command: Callable[[EditorTab], object]) -> None:
+        """Run an editing command on the current tab and keep the cursor in view."""
+        tab = self.current_tab()
+        if tab is None:
+            return
+        command(tab)
+        tab.view.scroll_mark_onscreen(tab.buffer.get_insert())
+
+    def action_toggle_comment(self, *_args: object) -> None:
+        tab = self.current_tab()
+        if tab is None:
+            return
+        message = edit_commands.toggle_comment(tab.buffer)
+        if message:
+            self._set_status(message)
+
+    def action_select_next(self, *_args: object) -> None:
+        tab = self.current_tab()
+        if tab is None:
+            return
+        if edit_commands.select_next_occurrence(tab.buffer):
+            tab.view.scroll_mark_onscreen(tab.buffer.get_insert())
+        else:
+            self._set_status(_("No other occurrence"))
+
     def action_normalize(self, *_args: object) -> None:
         """Clean up whitespace — on the selection if there is one, else on the
         whole file. Re-joining hard-wrapped lines is the one lossy step, so it
@@ -1230,6 +1595,41 @@ class EditorWindow(Gtk.ApplicationWindow):
             return
         launcher = Gtk.FileLauncher.new(Gio.File.new_for_path(str(directory)))
         launcher.launch(self, None, lambda *_: None)
+
+    def action_open_in_browser(self, *_args: object) -> None:
+        """Show an HTML file in the desktop's browser, saving it first if it has unsaved edits."""
+        path = self.sidebar.get_context_path()
+        if not browser.is_html_path(path):
+            tab = self.current_tab()
+            path = tab.buffer.path if tab is not None else None
+        self.sidebar.clear_context_path()
+        if not browser.is_html_path(path):
+            self._set_status(_("Open in Browser works on HTML files"))
+            return
+        tab = next((t for t in self.all_tabs() if t.buffer.path == path), None)
+        if tab is not None and tab.buffer.get_modified():
+            self._save_to(tab, path, lambda ok: self._launch_browser(path) if ok else None)
+            return
+        self._launch_browser(path)
+
+    def _launch_browser(self, path: Path) -> None:
+        # The portal opens a file with its default application, and Apedi itself claims text/html.
+        handler = Gio.AppInfo.get_default_for_type("text/html", False)
+        handler_id = handler.get_id() if handler is not None else None
+        if browser.handler_is_self(handler_id, APP_ID):
+            self._set_status(_("Apedi is the default application for HTML - set a browser instead"))
+            return
+
+        def done(launcher: Gtk.FileLauncher, result: Gio.AsyncResult) -> None:
+            try:
+                launcher.launch_finish(result)
+            except GLib.Error as e:
+                self._set_status(_("Cannot open {name}: {error}").format(name=path.name, error=e.message))
+                return
+            self._set_status(_("Opened {name} in the browser").format(name=path.name))
+
+        launcher = Gtk.FileLauncher.new(Gio.File.new_for_path(str(path)))
+        launcher.launch(self, None, done)
 
     def action_toggle_wrap(self, *_args: object) -> None:
         self.settings.wrap_lines = not self.settings.wrap_lines
@@ -1357,6 +1757,52 @@ class EditorWindow(Gtk.ApplicationWindow):
             self._apply_terminal_visibility()
         self.terminal_panel.add_terminal(self.settings.last_project or None)
 
+    def action_run_task(self, *_args: object) -> None:
+        """Pick a task from the open projects and run it in a new terminal tab."""
+        from .command_palette import CommandPalette
+        from .tasks import OWN_TASKS, detect_tasks
+
+        projects = self.sidebar.projects() or self._fallback_search_roots()
+        tasks = [task for project in projects for task in detect_tasks(project)]
+        if not tasks:
+            self._set_status(
+                _("No tasks found - add a Makefile, package.json scripts or {file}").format(file=OWN_TASKS)
+            )
+            return
+        many = len(projects) > 1
+        entries = [
+            (
+                f"{task.name}  ·  {task.project.name}" if many else task.name,
+                str(i),
+                f"{task.command}  ({task.source})",
+            )
+            for i, task in enumerate(tasks)
+        ]
+        CommandPalette(
+            self, entries, lambda idx: self._run_task(tasks[int(idx)]),
+            title=_("Run Task"), placeholder=_("Type a task name…"),
+        ).present()
+
+    def action_rerun_task(self, *_args: object) -> None:
+        task = getattr(self, "_last_task", None)
+        if task is None:
+            self.action_run_task()
+            return
+        self._run_task(task)
+
+    def _run_task(self, task) -> None:
+        self._init_deferred()
+        if self.terminal_panel is None:
+            self._set_status(_("Terminal unavailable in this build"))
+            return
+        self._last_task = task
+        if not self.settings.show_terminal:
+            self.settings.show_terminal = True
+            self.settings.save()
+            # Shown directly, so the panel does not open an idle shell next to the task.
+            self.terminal_panel.set_visible(True)
+        self.terminal_panel.add_terminal(str(task.cwd), command=task.command, title=task.name)
+
     def action_toggle_preview(self, *_args: object) -> None:
         tab = self.current_tab()
         if tab is None:
@@ -1375,6 +1821,86 @@ class EditorWindow(Gtk.ApplicationWindow):
             return True
         lang = tab.buffer.get_language()
         return lang is not None and lang.get_id() == "markdown"
+
+    # ---------- markdown outline ----------
+
+    def _schedule_outline(self, delay_ms: int = 300) -> None:
+        if self._outline_timer_id is not None:
+            GLib.source_remove(self._outline_timer_id)
+        self._outline_timer_id = GLib.timeout_add(delay_ms, self._refresh_outline)
+
+    def _refresh_outline(self) -> bool:
+        from .outline import markdown_headings
+
+        self._outline_timer_id = None
+        tab = self.current_tab()
+        show = bool(self.settings.show_outline) and tab is not None and self._is_markdown_tab(tab)
+        if show:
+            self.outline.set_headings(markdown_headings(tab.buffer.get_full_text()))
+            show = self.outline.has_headings()
+            if show:
+                self._outline_follow_cursor(tab)
+        self.outline.set_visible(show)
+        return False
+
+    def _outline_follow_cursor(self, tab: EditorTab) -> None:
+        if tab is not self.current_tab() or not self.outline.get_visible():
+            return
+        cursor = tab.buffer.get_iter_at_mark(tab.buffer.get_insert())
+        self.outline.highlight_line(cursor.get_line() + 1)
+
+    def _outline_jump(self, line: int) -> None:
+        tab = self.current_tab()
+        if tab is None:
+            return
+        target = tab.buffer.get_iter_at_line(max(0, line - 1))[1]
+        tab.buffer.place_cursor(target)
+        tab.reveal_cursor()
+        tab.view.grab_focus()
+
+    def _export_markdown(self, kind: str) -> None:
+        """Save the current markdown tab as a standalone HTML page or a PDF."""
+        tab = self.current_tab()
+        if tab is None or not self._is_markdown_tab(tab):
+            self._set_status(_("Export works on Markdown files"))
+            return
+        source = tab.buffer.path
+        stem = source.stem if source is not None else _("Untitled")
+        dialog = Gtk.FileDialog()
+        dialog.set_title(_("Export as HTML") if kind == "html" else _("Export as PDF"))
+        dialog.set_initial_name(f"{stem}.{kind}")
+        if source is not None and source.parent.is_dir():
+            dialog.set_initial_folder(Gio.File.new_for_path(str(source.parent)))
+        text = tab.buffer.get_full_text()
+        base = source.parent if source is not None else None
+
+        def done(dlg: Gtk.FileDialog, result: Gio.AsyncResult) -> None:
+            try:
+                file = dlg.save_finish(result)
+            except GLib.Error:
+                return
+            if file is None:
+                return
+            out = Path(file.get_path())
+            try:
+                from . import md_export
+
+                if kind == "html":
+                    out.write_text(md_export.to_html(text, base, stem), encoding="utf-8")
+                else:
+                    md_export.to_pdf(text, base, out)
+            except Exception as e:  # noqa: BLE001
+                log.exception("markdown export failed")
+                self._alert(_("Export failed"), f"{out}: {e}")
+                return
+            self._set_status(_("Exported to {path}").format(path=out))
+
+        dialog.save(self, None, done)
+
+    def action_toggle_outline(self, *_args: object) -> None:
+        self.settings.show_outline = not self.settings.show_outline
+        self.settings.save()
+        self._schedule_outline(0)
 
     def _maybe_auto_preview(self, tab: "EditorTab") -> None:
         if not self.settings.markdown_preview_auto:
@@ -1398,6 +1924,7 @@ class EditorWindow(Gtk.ApplicationWindow):
             "find": self.action_sidebar_find,
             "replace": self.action_sidebar_replace,
             "replace-with": self.action_sidebar_replace_with,
+            "open-in-browser": self.action_open_in_browser,
         }
         handler = handlers.get(action_id)
         if handler is not None:
@@ -1608,24 +2135,42 @@ class EditorWindow(Gtk.ApplicationWindow):
         if path.is_dir():
             scope = f"{scope}/"
 
-        def on_chosen(file_path: Path, line: int) -> None:
-            self.open_path(file_path)
-            tab = self.current_tab()
-            if tab is not None and line > 0:
-                target = tab.buffer.get_iter_at_line(max(0, line - 1))[1]
-                tab.buffer.place_cursor(target)
-                tab.view.scroll_to_iter(target, 0.2, True, 0.0, 0.5)
-                tab.view.grab_focus()
-
         dialog = FindInFilesDialog(
-            self, [path], list(self.settings.ignore_patterns), on_chosen,
+            self, [path], list(self.settings.ignore_patterns), self.open_at,
             with_replace=with_replace, scope_label=scope,
             initial_query=self._selected_text(),
+            **self._open_buffer_access(),
         )
         dialog.present()
         if focus_replace:
             dialog.focus_replace_entry()
         self.sidebar.clear_context_path()
+
+    def _open_buffer_access(self) -> dict:
+        """Let Find/Replace in Files read and edit open tabs instead of the stale copy on disk."""
+        by_path: dict[str, EditorTab] = {}
+        for tab in self.all_tabs():
+            if tab.buffer.path is not None:
+                by_path[str(tab.buffer.path)] = tab
+                try:
+                    by_path[str(tab.buffer.path.resolve())] = tab
+                except OSError:
+                    pass
+
+        def lookup(path: Path) -> EditorTab | None:
+            return by_path.get(str(path)) or (by_path.get(str(path.resolve())) if by_path else None)
+
+        def open_texts() -> dict[str, str]:
+            return {key: tab.buffer.get_full_text() for key, tab in by_path.items()}
+
+        def apply_to_buffer(path: Path, text: str) -> bool:
+            tab = lookup(path)
+            if tab is None:
+                return False
+            tab.buffer.replace_text_preserving_cursor(text)
+            return True
+
+        return {"open_texts": open_texts, "apply_to_buffer": apply_to_buffer}
 
     def _prompt_string(
         self, title: str, label: str, initial: str, on_ok: Callable[[str], None],
@@ -1681,16 +2226,36 @@ class EditorWindow(Gtk.ApplicationWindow):
         (_("Quick Open…"), "win.quick-open"),
         (_("Find…"), "win.find"),
         (_("Find in Files…"), "win.find-in-files"),
+        (_("Replace in Files…"), "win.replace-in-files"),
         (_("Replace…"), "win.replace"),
         (_("Go to Line…"), "win.goto-line"),
         (_("Go to Symbol…"), "win.symbols"),
+        (_("Go to Symbol in Project…"), "win.project-symbols"),
         (_("Format Code"), "win.format"),
         (_("Normalize Whitespace"), "win.normalize"),
+        (_("Toggle Comment"), "win.toggle-comment"),
+        (_("Duplicate Line Down"), "win.duplicate-down"),
+        (_("Duplicate Line Up"), "win.duplicate-up"),
+        (_("Move Line Up"), "win.move-line-up"),
+        (_("Move Line Down"), "win.move-line-down"),
+        (_("Select Next Occurrence"), "win.select-next"),
+        (_("Go to Matching Bracket"), "win.jump-bracket"),
         (_("Open Backups Folder"), "win.open-backups"),
+        (_("Open in Browser"), "win.open-in-browser"),
+        (_("Split Editor"), "win.split-editor"),
+        (_("Move Tab to Other Group"), "win.move-to-other-group"),
+        (_("Join Editor Groups"), "win.join-groups"),
+        (_("Focus Left Editor Group"), "win.focus-group-1"),
+        (_("Focus Right Editor Group"), "win.focus-group-2"),
         (_("Toggle Sidebar"), "win.toggle-sidebar"),
         (_("Toggle Terminal"), "win.toggle-terminal"),
         (_("New Terminal"), "win.new-terminal"),
+        (_("Run Task…"), "win.run-task"),
+        (_("Run Last Task"), "win.rerun-task"),
         (_("Toggle Markdown Preview"), "win.toggle-preview"),
+        (_("Toggle Markdown Outline"), "win.toggle-outline"),
+        (_("Export Markdown as HTML…"), "win.export-html"),
+        (_("Export Markdown as PDF…"), "win.export-pdf"),
         (_("Toggle Word Wrap"), "win.toggle-wrap"),
         (_("Toggle Line Numbers"), "win.toggle-line-numbers"),
         (_("Toggle Minimap"), "win.toggle-minimap"),
@@ -1701,11 +2266,19 @@ class EditorWindow(Gtk.ApplicationWindow):
         (_("Quit"), "app.quit"),
     ]
 
+    # Bound by GtkSourceView itself rather than the application.
+    _BUILTIN_ACCELS = {
+        "win.move-line-up": "<Alt>Up",
+        "win.move-line-down": "<Alt>Down",
+    }
+
     def _accel_label_for(self, action_name: str) -> str:
         app = self.get_application()
         if app is None:
             return ""
-        accels = app.get_accels_for_action(action_name)
+        accels = app.get_accels_for_action(action_name) or [
+            a for a in [self._BUILTIN_ACCELS.get(action_name)] if a
+        ]
         if not accels:
             return ""
         ok, keyval, mods = Gtk.accelerator_parse(accels[0])
@@ -1752,7 +2325,7 @@ class EditorWindow(Gtk.ApplicationWindow):
                 seen.append(parent)
         return seen
 
-    def action_find_in_files(self, *_args: object) -> None:
+    def action_find_in_files(self, *_args: object, with_replace: bool = False) -> None:
         from .find_in_files import FindInFilesDialog
 
         self._init_deferred()
@@ -1770,19 +2343,12 @@ class EditorWindow(Gtk.ApplicationWindow):
             if proj is not None:
                 initial_projects = [proj]
 
-        def on_chosen(path: Path, line: int) -> None:
-            self.open_path(path)
-            tab = self.current_tab()
-            if tab is not None and line > 0:
-                target = tab.buffer.get_iter_at_line(max(0, line - 1))[1]
-                tab.buffer.place_cursor(target)
-                tab.view.scroll_to_iter(target, 0.2, True, 0.0, 0.5)
-                tab.view.grab_focus()
-
         FindInFilesDialog(
-            self, initial_projects, list(self.settings.ignore_patterns), on_chosen,
+            self, initial_projects, list(self.settings.ignore_patterns), self.open_at,
+            with_replace=with_replace,
             initial_query=self._selected_text(),
             all_projects=list(all_projects),
+            **self._open_buffer_access(),
         ).present()
 
     def action_symbols(self, *_args: object) -> None:
@@ -1807,6 +2373,18 @@ class EditorWindow(Gtk.ApplicationWindow):
 
         SymbolPaletteDialog(self, syms, on_chosen).present()
 
+    def action_project_symbols(self, *_args: object) -> None:
+        from .project_symbols import ProjectSymbolsDialog
+
+        self._init_deferred()
+        projects = self.sidebar.projects() or self._fallback_search_roots()
+        if not projects:
+            self._set_status(_("Go to Symbol in Project needs an open project or an open file"))
+            return
+        ProjectSymbolsDialog(
+            self, projects, list(self.settings.ignore_patterns), self.open_at,
+        ).present()
+
     def action_preferences(self, *_args: object) -> None:
         from .preferences import PreferencesDialog
 
@@ -1830,6 +2408,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._apply_git_decorations()
         self._cancel_autosave()
         self._update_status()
+        self._schedule_outline(0)
 
     def _autosave_bump(self) -> None:
         if self.settings.autosave != "delay":
@@ -2028,8 +2607,10 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.status_bar.push(self.status_ctx, msg)
         return False
 
-    def _on_switch_page(self, _nb: Gtk.Notebook, page: Gtk.Widget, _idx: int) -> None:
+    def _on_switch_page(self, nb: Gtk.Notebook, page: Gtk.Widget, _idx: int) -> None:
+        self._set_active_notebook(nb)
         GLib.idle_add(self._update_status)
+        self._schedule_outline(0)
         if isinstance(page, EditorTab) and page.buffer.path:
             self.sidebar.reveal_file(page.buffer.path)
 
@@ -2049,23 +2630,40 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._pending_session_state = (
             self._session_state() if self.settings.restore_session else None
         )
-        dirty = [t for t in self.all_tabs() if t.buffer.get_modified()]
+        dirty = self._unique_buffers([t for t in self.all_tabs() if t.buffer.get_modified()])
         if not dirty:
             self._remember_session()
             return False
         self._prompt_close_chain(dirty, 0)
         return True  # block close, will re-call destroy when done
 
+    @staticmethod
+    def _unique_buffers(tabs: list[EditorTab]) -> list[EditorTab]:
+        """One tab per buffer, so a file shown in both groups is asked about once."""
+        seen: set[int] = set()
+        out = []
+        for tab in tabs:
+            if id(tab.buffer) not in seen:
+                seen.add(id(tab.buffer))
+                out.append(tab)
+        return out
+
     def _session_state(self) -> dict:
         """Serialize this window's open files + cursor for session restore."""
         tabs: list[dict] = []
-        for tab in self.all_tabs():
-            path = tab.buffer.path
-            if path is None:
-                continue  # scratch buffers are handled by recovery drafts
-            ins = tab.buffer.get_iter_at_mark(tab.buffer.get_insert())
-            tabs.append({"path": str(path), "cursor": ins.get_offset()})
-        return {"tabs": tabs, "active": self.notebook.get_current_page()}
+        for group, nb in enumerate(self._notebooks):
+            for tab in self._tabs_in(nb):
+                path = tab.buffer.path
+                if path is None:
+                    continue  # scratch buffers are handled by recovery drafts
+                ins = tab.buffer.get_iter_at_mark(tab.buffer.get_insert())
+                tabs.append({"path": str(path), "cursor": ins.get_offset(), "group": group})
+        return {
+            "tabs": tabs,
+            "active": self._notebooks[0].get_current_page(),
+            "group_pages": [nb.get_current_page() for nb in self._notebooks],
+            "active_group": self._notebooks.index(self._active_nb),
+        }
 
     def _remember_session(self) -> None:
         state = getattr(self, "_pending_session_state", None)
@@ -2082,7 +2680,7 @@ class EditorWindow(Gtk.ApplicationWindow):
             self.destroy()
             return
         tab = tabs[idx]
-        self.notebook.set_current_page(self.notebook.page_num(tab))
+        self._focus_tab(tab)
         self._confirm_save_async(tab, lambda: self._prompt_close_chain(tabs, idx + 1))
 
     def _confirm_save_async(self, tab: EditorTab, on_done: callable) -> None:

@@ -24,6 +24,36 @@ def user_shell_name() -> str:
     return ""
 
 
+def real_home() -> Path:
+    """The user's home from passwd; inside a snap $HOME points at the snap's own data directory."""
+    try:
+        pw_dir = pwd.getpwuid(os.getuid()).pw_dir
+    except (KeyError, OSError):
+        pw_dir = ""
+    return Path(pw_dir) if pw_dir else Path.home()
+
+
+def _readable(path: Path) -> bool:
+    """Whether the file can really be read; os.access only checks permissions, not confinement."""
+    try:
+        with path.open("rb") as handle:
+            handle.read(1)
+    except OSError:
+        return False
+    return True
+
+
+def zsh_zdotdir(shell: str) -> str | None:
+    """Apedi's own zsh startup files, used only where the user's own ones are out of reach."""
+    snap = os.environ.get("SNAP", "")
+    if not snap or Path(shell).name != "zsh":
+        return None
+    if _readable(real_home() / ".zshrc"):
+        return None
+    zdotdir = Path(snap) / "usr/share/apedi/zdotdir"
+    return str(zdotdir) if zdotdir.is_dir() else None
+
+
 def resolve_shell() -> str:
     """Pick the shell binary by the user's basename, bundled copies first."""
     snap = os.environ.get("SNAP", "")
@@ -58,4 +88,7 @@ def spawn_env(shell: str) -> list[str]:
     """Environment for the terminal child with SHELL set to the shell actually started."""
     env = dict(os.environ)
     env["SHELL"] = shell
+    zdotdir = zsh_zdotdir(shell)
+    if zdotdir is not None:
+        env["ZDOTDIR"] = zdotdir
     return [f"{k}={v}" for k, v in env.items()]

@@ -3,6 +3,31 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.21] - 2026-09-28
+
+### Added
+- **Split editor** (`Ctrl+\`) shows two tab groups side by side, and `Ctrl+1` / `Ctrl+2` switch between them.
+- **Line editing:** `Ctrl+/` toggles comments, `Shift+Alt+Down/Up` duplicates, `Ctrl+D` selects the next occurrence and `Ctrl+Shift+\` jumps to the matching bracket.
+- **Brackets and quotes close themselves**, with a switch in Preferences → Editor.
+- **Go to Symbol in Project** (`Ctrl+Shift+R`) finds classes and functions across every open project, PHP included.
+- **Run Task** (`Ctrl+Shift+B`, `F5` for the last one) runs Makefile, npm, Composer and `.apedi/tasks.toml` tasks in a terminal tab.
+- **Replace in Files** (`Ctrl+Shift+H`) previews every match and lets you untick the ones to keep.
+- **Markdown** preview shows local images, the sidebar gets an outline, and the View menu exports to HTML or PDF.
+- **Open in Browser** shows an HTML file in your browser, from the project tree, the editor's right-click menu or the palette.
+- **Terminal** copies and pastes with `Ctrl+Shift+C` / `Ctrl+Shift+V` or the right-click menu, and `Ctrl+click` on `file:line` opens that spot.
+
+### Fixed
+- **Shell shortcuts reach the terminal** instead of editor actions, so `Ctrl+R`, `Ctrl+W` and the rest work in the shell.
+- **Replace in Files keeps each file's encoding and CRLF line endings.**
+- **Go to Symbol no longer lists Python methods twice.**
+- **Opening a file at a given line scrolls to it**, even in a freshly opened tab.
+- **zsh inside the snap finds its modules**, so line editing, `Ctrl+R` and `Ctrl+C` work instead of failing to load `zsh/zle`.
+- **The snap carries a small zsh setup** with history and completion, because a confined snap cannot read your own `~/.zshrc`.
+- **Closing the last terminal hides the panel** and hands focus back to the editor.
+- **Find and Replace in Files search in the background**, showing a file counter and a Stop button instead of freezing the window.
+- **The editor's right-click menu carries the split commands**, with Join greyed out while there is only one group.
+- **The Polish translation covers the whole interface**, the keyboard shortcuts window included.
+
 ## [0.7.17] - 2026-09-14
 
 ### Added

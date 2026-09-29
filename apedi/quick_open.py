@@ -170,6 +170,7 @@ class QuickOpenDialog(Gtk.Window):
         dir_label.set_text(entry.rel_dir)
 
     def _refresh(self, query: str) -> None:
+        self._shown_query = query
         scored: list[tuple[int, _FileEntry]] = []
         for e in self._all:
             score = _fuzzy_score(query, e.name, e.path_str)
@@ -208,6 +209,9 @@ class QuickOpenDialog(Gtk.Window):
         return False
 
     def _activate_selected(self) -> None:
+        # Enter can beat the entry's search delay; filter first so the visible pick is the right one.
+        if self.entry.get_text() != getattr(self, "_shown_query", None):
+            self._refresh(self.entry.get_text())
         idx = self.selection.get_selected()
         if idx == Gtk.INVALID_LIST_POSITION:
             return

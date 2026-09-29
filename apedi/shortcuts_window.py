@@ -44,7 +44,11 @@ def present(parent: Gtk.Window) -> None:
     _add(nav_group, "<Primary>p",             _("Quick Open file"))
     _add(nav_group, "<Primary><Shift>p",      _("Command Palette"))
     _add(nav_group, "<Primary>m",             _("Go to symbol in file"))
+    _add(nav_group, "<Primary><Shift>r",      _("Go to symbol in project"))
     _add(nav_group, "<Primary>g",             _("Go to line"))
+    _add(nav_group, "<Primary>backslash",     _("Split editor"))
+    _add(nav_group, "<Primary>1",             _("Focus left editor group"))
+    _add(nav_group, "<Primary>2",             _("Focus right editor group"))
     section.add_group(nav_group)
 
     # Search & edit
@@ -52,9 +56,21 @@ def present(parent: Gtk.Window) -> None:
     _add(edit_group, "<Primary>f",            _("Find"))
     _add(edit_group, "<Primary>r",            _("Replace"))
     _add(edit_group, "<Primary><Shift>f",     _("Find in Files"))
+    _add(edit_group, "<Primary><Shift>h",     _("Replace in Files"))
     _add(edit_group, "<Primary><Shift>i",     _("Format current file"))
     _add(edit_group, "<Primary><Alt>i",       _("Normalize whitespace"))
     section.add_group(edit_group)
+
+    # Lines
+    lines_group = Gtk.ShortcutsGroup(title=_("Lines"))
+    _add(lines_group, "<Primary>slash",           _("Toggle comment"))
+    _add(lines_group, "<Alt><Shift>Down",         _("Duplicate line down"))
+    _add(lines_group, "<Alt><Shift>Up",           _("Duplicate line up"))
+    _add(lines_group, "<Alt>Up",                  _("Move line up"))
+    _add(lines_group, "<Alt>Down",                _("Move line down"))
+    _add(lines_group, "<Primary>d",               _("Select next occurrence"))
+    _add(lines_group, "<Primary><Shift>backslash", _("Go to matching bracket"))
+    section.add_group(lines_group)
 
     # Sidebar
     sidebar_group = Gtk.ShortcutsGroup(title=_("Sidebar"))
@@ -76,6 +92,14 @@ def present(parent: Gtk.Window) -> None:
     _add(view_group, "<Primary>comma",        _("Preferences"))
     _add(view_group, "<Primary><Shift>d",     _("Toggle light / dark theme"))
     section.add_group(view_group)
+
+    # Terminal
+    term_group = Gtk.ShortcutsGroup(title=_("Terminal"))
+    _add(term_group, "<Primary><Shift>c",     _("Copy selection"))
+    _add(term_group, "<Primary><Shift>v",     _("Paste"))
+    _add(term_group, "<Primary><Shift>b",     _("Run task"))
+    _add(term_group, "F5",                    _("Run last task"))
+    section.add_group(term_group)
 
     win.add_section(section)
     win.set_title(_("Keyboard Shortcuts"))

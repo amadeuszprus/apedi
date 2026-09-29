@@ -38,12 +38,13 @@ try:
     import gi
 
     gi.require_version("Gtk", "4.0")
-    from gi.repository import Gio, GLib, Gtk  # noqa: E402
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk, Gio, GLib, Gtk  # noqa: E402
     GTK_AVAILABLE = True
 except (ImportError, ValueError) as _e:
     GTK_AVAILABLE = False
     log.info("Gtk not available — markdown preview disabled: %s", _e)
-    Gio = GLib = Gtk = None  # type: ignore[assignment]
+    Gdk = Gio = GLib = Gtk = None  # type: ignore[assignment]
 
 # GtkSourceView is used to syntax-highlight fenced code blocks. It's optional:
 # if it can't load, code blocks fall back to a plain monospace label.
@@ -170,7 +171,31 @@ class CodeBlock:
     lang: str | None
 
 
-Block = ProseBlock | TableBlock | CodeBlock
+@dataclass(frozen=True)
+class ImageBlock:
+    """An image standing on its own; `src` exactly as written in the markdown."""
+    src: str
+    alt: str
+
+
+Block = ProseBlock | TableBlock | CodeBlock | ImageBlock
+
+
+def local_image_path(src: str, base: Path | None) -> Path | None:
+    """File an image source points at, or None for remote, inline or unresolvable ones."""
+    from urllib.parse import unquote
+
+    if not src or src.startswith(("http://", "https://", "data:", "//")):
+        return None
+    if src.startswith("file://"):
+        src = src[len("file://"):]
+    clean = unquote(src.split("#", 1)[0].split("?", 1)[0])
+    path = Path(clean)
+    if path.is_absolute():
+        return path
+    if base is None:
+        return None
+    return base / path
 
 
 # ---------- HTML → Pango converter ----------
@@ -359,11 +384,14 @@ class _BlockSplitter(HTMLParser):
     """
 
     _TABLE_STRUCT = {"thead", "tbody", "tr", "th", "td"}
+    _INLINE = {"strong", "b", "em", "i", "a", "code", "del", "s", "span", "sup", "sub", "mark"}
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.blocks: list[Block] = []
         self._prose = _PangoBuilder(dark=False)
+        # Open inline tags in prose; an image inside one cannot split the paragraph.
+        self._inline_depth = 0
         # Table state
         self._in_table = False
         self._table_header: list[str] | None = None
@@ -433,8 +461,22 @@ class _BlockSplitter(HTMLParser):
             if tag == "code":
                 self._code_lang = self._parse_lang(attrs_d.get("class", "") or "")
             return
+        if tag == "img" and self._can_split_for_image():
+            self._flush_prose()
+            self.blocks.append(ImageBlock(src=attrs_d.get("src", "") or "", alt=attrs_d.get("alt", "") or ""))
+            return
+        if tag in self._INLINE:
+            self._inline_depth += 1
         # Prose
         self._prose.handle_starttag(tag, attrs)
+
+    def _can_split_for_image(self) -> bool:
+        """Images get a block of their own unless they sit in a list, quote or inline span."""
+        return (
+            not self._prose.list_stack
+            and self._prose._quote_depth == 0
+            and self._inline_depth == 0
+        )
 
     def handle_endtag(self, tag) -> None:
         if self._in_table:
@@ -448,6 +490,8 @@ class _BlockSplitter(HTMLParser):
                 self._emit_code_block()
                 self._in_pre_code = False
             return
+        if tag in self._INLINE:
+            self._inline_depth = max(0, self._inline_depth - 1)
         self._prose.handle_endtag(tag)
 
     def handle_data(self, data) -> None:
@@ -552,6 +596,9 @@ if GTK_AVAILABLE:
         ) -> None:
             self._on_activate_link = on_activate_link
             self.dark = dark
+            self.base: Path | None = None
+            # Decoded images by path, reused while the file's mtime is unchanged.
+            self._textures: dict[str, tuple[float, "Gdk.Texture"]] = {}
 
         def build(self, block: Block) -> "Gtk.Widget":
             if isinstance(block, ProseBlock):
@@ -560,7 +607,44 @@ if GTK_AVAILABLE:
                 return self._build_table(block)
             if isinstance(block, CodeBlock):
                 return self._build_code(block)
+            if isinstance(block, ImageBlock):
+                return self._build_image(block)
             raise TypeError(f"Unknown block type: {type(block).__name__}")
+
+        def _texture_for(self, path: Path) -> "Gdk.Texture | None":
+            try:
+                mtime = path.stat().st_mtime
+            except OSError:
+                return None
+            cached = self._textures.get(str(path))
+            if cached is not None and cached[0] == mtime:
+                return cached[1]
+            try:
+                texture = Gdk.Texture.new_from_filename(str(path))
+            except GLib.Error as e:
+                log.debug("cannot load image %s: %s", path, e.message)
+                return None
+            self._textures[str(path)] = (mtime, texture)
+            return texture
+
+        def _build_image(self, block: ImageBlock) -> "Gtk.Widget":
+            path = local_image_path(block.src, self.base)
+            texture = self._texture_for(path) if path is not None else None
+            if texture is None:
+                name = block.src.rsplit("/", 1)[-1] or block.src or "image"
+                return self._build_prose(ProseBlock(
+                    f'<a href="{_html_escape(block.src, quote=True)}">'
+                    f'[🖼 {_html_escape(block.alt or name, quote=False)}]</a>'
+                ))
+            picture = Gtk.Picture.new_for_paintable(texture)
+            picture.set_can_shrink(True)
+            picture.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
+            picture.set_halign(Gtk.Align.START)
+            picture.set_margin_top(6)
+            picture.set_margin_bottom(6)
+            picture.set_alternative_text(block.alt or path.name)
+            picture.set_tooltip_text(block.alt or block.src)
+            return picture
 
         def _build_prose(self, block: ProseBlock) -> "Gtk.Label":
             label = Gtk.Label()
@@ -717,6 +801,8 @@ if GTK_AVAILABLE:
             viewport = self.get_child()
             if isinstance(viewport, Gtk.Viewport):
                 viewport.set_scroll_to_focus(False)
+                # Size the content by natural height; shrinkable images have a near-zero minimum.
+                viewport.set_vscroll_policy(Gtk.ScrollablePolicy.NATURAL)
 
         def set_dark(self, is_dark: bool) -> None:
             # Prose colors use alpha(currentColor,…) so they need no re-render,
@@ -753,6 +839,7 @@ if GTK_AVAILABLE:
             return False
 
         def _render_now(self, text: str, base_path: Path | None) -> None:
+            self._renderer.base = base_path
             # First-render path: python-markdown hasn't been imported yet
             # (~50 ms cost). Show a placeholder, defer real render to idle.
             if MARKDOWN_AVAILABLE and _md is None:

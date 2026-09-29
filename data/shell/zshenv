@@ -1,0 +1,9 @@
+# Apedi ships zsh inside the snap, where its modules and functions are not under /usr.
+if [[ -n $SNAP ]]; then
+  typeset -a _apedi_modules _apedi_functions
+  _apedi_modules=( ${SNAP}/usr/lib/*/zsh/${ZSH_VERSION}(N/) )
+  _apedi_functions=( ${SNAP}/usr/share/zsh/functions/**/*(N/) ${SNAP}/usr/share/zsh/functions(N/) )
+  (( ${#_apedi_modules} )) && module_path=( $_apedi_modules )
+  (( ${#_apedi_functions} )) && fpath=( $_apedi_functions $fpath )
+  unset _apedi_modules _apedi_functions
+fi

@@ -74,6 +74,8 @@ class Settings:
     show_minimap: bool = False
     restore_session: bool = True
     show_git_changes: bool = True
+    auto_close_brackets: bool = True
+    show_outline: bool = True
 
     @classmethod
     def load(cls, path: Path = CONFIG_PATH) -> "Settings":

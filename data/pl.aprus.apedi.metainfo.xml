@@ -36,6 +36,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.21" date="2026-09-28">
+      <description><p>Split editor, Go to Symbol in Project, tasks, Replace in Files with a per-match preview, a markdown outline with inline images and HTML or PDF export, opening HTML files in the browser, and a terminal that keeps shell shortcuts and gains copy and paste.</p></description>
+    </release>
     <release version="0.7.17" date="2026-09-14">
       <description><p>Git awareness. A thin bar in the gutter shows how the buffer differs from the last commit - green for added lines, amber for changed ones, red where a block was removed - and it follows your typing, not just what is saved. In the project tree modified files turn amber, new ones green and conflicts red, with folders taking the strongest state of anything inside them. Colours refresh on save and on their own after a commit, checkout or stash made in the terminal. One switch in Preferences → Editor turns it all off, and the snap now bundles git. Also fixed: the integrated terminal opens your login shell (zsh users got bash inside the snap), and expanding a folder in the project tree no longer freezes the editor - folders are listed in the background with a spinner row while they load.</p></description>
     </release>

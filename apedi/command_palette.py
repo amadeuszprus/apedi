@@ -49,9 +49,12 @@ class CommandPalette(Gtk.Window):
         parent: Gtk.Window,
         commands: list[tuple[str, str, str]],
         on_chosen: Callable[[str], None],
+        *,
+        title: str | None = None,
+        placeholder: str | None = None,
     ) -> None:
         super().__init__(
-            title=_("Command Palette"),
+            title=title or _("Command Palette"),
             transient_for=parent, modal=True,
             default_width=520, default_height=420,
         )
@@ -70,7 +73,7 @@ class CommandPalette(Gtk.Window):
         )
 
         self.entry = Gtk.SearchEntry()
-        self.entry.set_placeholder_text(_("Type a command…"))
+        self.entry.set_placeholder_text(placeholder or _("Type a command…"))
         self.entry.connect("search-changed", self._on_search_changed)
         self.entry.connect("activate", lambda *_: self._activate_selected())
         outer.append(self.entry)
@@ -122,6 +125,7 @@ class CommandPalette(Gtk.Window):
         accel_label.set_text(entry.accel)
 
     def _refresh(self, query: str) -> None:
+        self._shown_query = query
         scored: list[tuple[int, int, _CommandEntry]] = []
         for order, e in enumerate(self._all):
             score = _fuzzy_score(query, e.title)
@@ -162,6 +166,9 @@ class CommandPalette(Gtk.Window):
         return False
 
     def _activate_selected(self) -> None:
+        # Enter can beat the entry's search delay; filter first so the visible pick is the right one.
+        if self.entry.get_text() != getattr(self, "_shown_query", None):
+            self._refresh(self.entry.get_text())
         idx = self.selection.get_selected()
         if idx == Gtk.INVALID_LIST_POSITION:
             return

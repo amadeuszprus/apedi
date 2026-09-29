@@ -101,11 +101,50 @@ def test_render_mailto() -> None:
 
 
 @pytestmark_md
-def test_render_image_placeholder() -> None:
-    m = mp.render_blocks("![alt](path/to/pic.png)")[0].pango_markup
+def test_render_image_placeholder_inside_list() -> None:
+    m = mp.render_blocks("- ![alt](path/to/pic.png)")[0].pango_markup
     assert "[🖼" in m
     assert "pic.png" in m
     assert '<a href="path/to/pic.png">' in m
+
+
+@pytestmark_md
+def test_standalone_image_becomes_its_own_block() -> None:
+    blocks = mp.render_blocks("Intro text\n\n![A cat](img/cat.png)\n\nAfter")
+    assert [type(b).__name__ for b in blocks] == ["ProseBlock", "ImageBlock", "ProseBlock"]
+    assert blocks[1] == mp.ImageBlock(src="img/cat.png", alt="A cat")
+
+
+@pytestmark_md
+def test_image_inside_paragraph_splits_the_text() -> None:
+    blocks = mp.render_blocks("before ![x](a.png) after")
+    assert [type(b).__name__ for b in blocks] == ["ProseBlock", "ImageBlock", "ProseBlock"]
+    assert "before" in blocks[0].pango_markup and "after" in blocks[2].pango_markup
+
+
+@pytestmark_md
+def test_image_in_blockquote_stays_inline() -> None:
+    blocks = mp.render_blocks("> ![x](a.png)")
+    assert len(blocks) == 1 and "[🖼" in blocks[0].pango_markup
+
+
+@pytest.mark.parametrize(
+    ("src", "expected"),
+    [
+        ("img/cat.png", Path("/doc/img/cat.png")),
+        ("./img/my%20cat.png", Path("/doc/img/my cat.png")),
+        ("/abs/pic.png", Path("/abs/pic.png")),
+        ("img/cat.png?raw=1#x", Path("/doc/img/cat.png")),
+        ("https://example.com/a.png", None),
+        ("data:image/png;base64,AAAA", None),
+    ],
+)
+def test_local_image_path(src: str, expected: Path | None) -> None:
+    assert mp.local_image_path(src, Path("/doc")) == expected
+
+
+def test_local_image_path_needs_a_base_for_relative_sources() -> None:
+    assert mp.local_image_path("img/cat.png", None) is None
 
 
 @pytestmark_md

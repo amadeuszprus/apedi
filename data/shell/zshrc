@@ -1,0 +1,9 @@
+# Fallback setup: a confined snap cannot read your own ~/.zshrc.
+bindkey -e
+HISTFILE=${SNAP_USER_COMMON:-$HOME}/.zsh_history
+HISTSIZE=10000
+SAVEHIST=10000
+setopt inc_append_history hist_ignore_dups hist_reduce_blanks
+autoload -Uz compinit && compinit -u -d ${SNAP_USER_COMMON:-$HOME}/.zcompdump
+autoload -Uz colors && colors
+PS1='%F{cyan}%~%f %# '

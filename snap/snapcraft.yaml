@@ -29,7 +29,7 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.17'
+version: '0.7.21'
 icon: data/apedi-icon-512.png
 contact: aprus@codesty.pl
 donation: https://ko-fi.com/aprus
@@ -166,11 +166,14 @@ parts:
       pl.aprus.apedi.desktop: usr/share/applications/pl.aprus.apedi.desktop
       pl.aprus.apedi.metainfo.xml: usr/share/metainfo/pl.aprus.apedi.metainfo.xml
       snippets/apedi.snippets: usr/share/apedi/snippets/apedi.snippets
+      shell/zshenv: usr/share/apedi/zdotdir/.zshenv
+      shell/zshrc: usr/share/apedi/zdotdir/.zshrc
     stage:
       - usr/share/applications/*
       - usr/share/icons/hicolor/*/apps/*
       - usr/share/metainfo/*
       - usr/share/apedi/snippets/*
+      - usr/share/apedi/zdotdir
 
   changelog:
     plugin: dump

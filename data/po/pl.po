@@ -329,3 +329,532 @@ msgstr "Nie można przeładować {name}: {error}"
 
 msgid "Loading…"
 msgstr "Wczytywanie…"
+
+# Split editor, editing commands, project symbols, tasks, markdown outline and export
+
+msgid "(showing the first {n})"
+msgstr "(pokazano pierwsze {n})"
+
+msgid "Auto-close brackets and quotes"
+msgstr "Automatyczne domykanie nawiasów i cudzysłowów"
+
+msgid "Copy"
+msgstr "Kopiuj"
+
+msgid "Copy selection"
+msgstr "Kopiuj zaznaczenie"
+
+msgid "Duplicate Line Down"
+msgstr "Powiel linię w dół"
+
+msgid "Duplicate Line Up"
+msgstr "Powiel linię w górę"
+
+msgid "Duplicate line down"
+msgstr "Powiel linię w dół"
+
+msgid "Duplicate line up"
+msgstr "Powiel linię w górę"
+
+msgid "Export Markdown as HTML…"
+msgstr "Eksportuj Markdown do HTML…"
+
+msgid "Export Markdown as PDF…"
+msgstr "Eksportuj Markdown do PDF…"
+
+msgid "Export as HTML"
+msgstr "Eksport do HTML"
+
+msgid "Export as PDF"
+msgstr "Eksport do PDF"
+
+msgid "Export failed"
+msgstr "Eksport nie powiódł się"
+
+msgid "Export works on Markdown files"
+msgstr "Eksport działa dla plików Markdown"
+
+msgid "Exported to {path}"
+msgstr "Wyeksportowano do {path}"
+
+msgid "Files open in a tab are changed in the editor and left unsaved, so you can undo. The others are rewritten on disk."
+msgstr "Pliki otwarte w zakładkach zmienią się w edytorze i zostaną niezapisane, więc można to cofnąć. Pozostałe zostaną nadpisane na dysku."
+
+msgid "Focus Left Editor Group"
+msgstr "Przejdź do lewej grupy edytora"
+
+msgid "Focus Right Editor Group"
+msgstr "Przejdź do prawej grupy edytora"
+
+msgid "Focus left editor group"
+msgstr "Przejdź do lewej grupy edytora"
+
+msgid "Focus right editor group"
+msgstr "Przejdź do prawej grupy edytora"
+
+msgid "Go to Matching Bracket"
+msgstr "Przejdź do pasującego nawiasu"
+
+msgid "Go to Symbol in Project"
+msgstr "Przejdź do symbolu w projekcie"
+
+msgid "Go to Symbol in Project needs an open project or an open file"
+msgstr "Przejście do symbolu w projekcie wymaga otwartego projektu lub pliku"
+
+msgid "Go to Symbol in Project…"
+msgstr "Przejdź do symbolu w projekcie…"
+
+msgid "Go to matching bracket"
+msgstr "Przejdź do pasującego nawiasu"
+
+msgid "Go to symbol in project"
+msgstr "Przejdź do symbolu w projekcie"
+
+msgid "Indexing…"
+msgstr "Indeksowanie…"
+
+msgid "Join Editor Groups"
+msgstr "Połącz grupy edytora"
+
+msgid "Lines"
+msgstr "Linie"
+
+msgid "Markdown outline in the sidebar"
+msgstr "Spis treści Markdown w panelu bocznym"
+
+msgid "Move Line Down"
+msgstr "Przenieś linię w dół"
+
+msgid "Move Line Up"
+msgstr "Przenieś linię w górę"
+
+msgid "Move Tab to Other Group"
+msgstr "Przenieś zakładkę do drugiej grupy"
+
+msgid "Move line down"
+msgstr "Przenieś linię w dół"
+
+msgid "Move line up"
+msgstr "Przenieś linię w górę"
+
+msgid "No comment syntax for plain text"
+msgstr "Zwykły tekst nie ma składni komentarzy"
+
+msgid "No comment syntax for {lang}"
+msgstr "Brak składni komentarzy dla {lang}"
+
+msgid "No other occurrence"
+msgstr "Brak kolejnego wystąpienia"
+
+msgid "No such file: {path}"
+msgstr "Nie ma takiego pliku: {path}"
+
+msgid "No tasks found - add a Makefile, package.json scripts or {file}"
+msgstr "Nie znaleziono zadań - dodaj Makefile, skrypty w package.json albo {file}"
+
+msgid "Outline"
+msgstr "Spis treści"
+
+msgid "Paste"
+msgstr "Wklej"
+
+msgid "Replace Selected"
+msgstr "Zamień zaznaczone"
+
+msgid "Replace in Files…"
+msgstr "Zamień w plikach…"
+
+msgid "Replace {n} selected matches?"
+msgstr "Zamienić zaznaczone trafienia ({n})?"
+
+msgid "Replaced {n} in {f} files"
+msgstr "Zamieniono {n} w plikach: {f}"
+
+msgid "Run Last Task"
+msgstr "Uruchom ostatnie zadanie"
+
+msgid "Run Task"
+msgstr "Uruchom zadanie"
+
+msgid "Run Task…"
+msgstr "Uruchom zadanie…"
+
+msgid "Run last task"
+msgstr "Uruchom ostatnie zadanie"
+
+msgid "Run task"
+msgstr "Uruchom zadanie"
+
+msgid "Select All"
+msgstr "Zaznacz wszystko"
+
+msgid "Select Next Occurrence"
+msgstr "Zaznacz kolejne wystąpienie"
+
+msgid "Select next occurrence"
+msgstr "Zaznacz kolejne wystąpienie"
+
+msgid "Split Editor"
+msgstr "Podziel edytor"
+
+msgid "Split editor"
+msgstr "Podziel edytor"
+
+msgid "Terminal unavailable in this build"
+msgstr "Terminal niedostępny w tej wersji"
+
+msgid "Toggle Comment"
+msgstr "Przełącz komentarz"
+
+msgid "Toggle Markdown Outline"
+msgstr "Przełącz spis treści Markdown"
+
+msgid "Toggle comment"
+msgstr "Przełącz komentarz"
+
+msgid "Type a class or function name…"
+msgstr "Wpisz nazwę klasy lub funkcji…"
+
+msgid "Type a task name…"
+msgstr "Wpisz nazwę zadania…"
+
+msgid "Untitled"
+msgstr "Bez nazwy"
+
+msgid "failed: {names}"
+msgstr "błędy: {names}"
+
+msgid "{n} of {total} selected"
+msgstr "zaznaczono {n} z {total}"
+
+msgid "{shown} of {total} symbols"
+msgstr "{shown} z {total} symboli"
+
+msgid "{t} open in tabs, not saved yet"
+msgstr "otwarte w zakładkach: {t}, jeszcze niezapisane"
+
+# Remaining UI strings
+
+msgid "A fast, simple text editor with syntax highlighting and code formatting"
+msgstr "Szybki, prosty edytor tekstu z kolorowaniem składni i formatowaniem kodu"
+
+msgid "No release notes found for this version."
+msgstr "Brak informacji o zmianach w tej wersji."
+
+msgid "Type a command…"
+msgstr "Wpisz nazwę polecenia…"
+
+msgid "Command Palette"
+msgstr "Paleta poleceń"
+
+msgid "Replace in Files"
+msgstr "Zamień w plikach"
+
+msgid "Find in Files"
+msgstr "Znajdź w plikach"
+
+msgid "Search across open projects…"
+msgstr "Szukaj w otwartych projektach…"
+
+msgid "Regular expression"
+msgstr "Wyrażenie regularne"
+
+msgid "Match case"
+msgstr "Uwzględnij wielkość liter"
+
+msgid "Search"
+msgstr "Szukaj"
+
+msgid "Stop"
+msgstr "Przerwij"
+
+msgid "Searching…"
+msgstr "Szukanie…"
+
+msgid "matches"
+msgstr "trafień"
+
+msgid "match"
+msgstr "trafienie"
+
+msgid "files"
+msgstr "plikach"
+
+msgid "file"
+msgstr "pliku"
+
+msgid "Search stopped"
+msgstr "Szukanie przerwane"
+
+msgid "All open projects"
+msgstr "Wszystkie otwarte projekty"
+
+msgid "Replace with…"
+msgstr "Zamień na…"
+
+msgid "Cancel"
+msgstr "Anuluj"
+
+msgid "Replace"
+msgstr "Zamień"
+
+msgid "Searching… {files} files, {matches} matches"
+msgstr "Szukanie… plików: {files}, trafień: {matches}"
+
+msgid "Scope: {label}"
+msgstr "Zakres: {label}"
+
+msgid "In:"
+msgstr "W:"
+
+msgid "python-markdown not installed"
+msgstr "python-markdown nie jest zainstalowany"
+
+msgid "Markdown preview unavailable (python-markdown missing)"
+msgstr "Podgląd Markdown niedostępny (brak python-markdown)"
+
+msgid "Loading preview…"
+msgstr "Wczytywanie podglądu…"
+
+msgid "Show minimap"
+msgstr "Pokaż minimapę"
+
+msgid "Markdown preview (auto-open for .md)"
+msgstr "Podgląd Markdown (otwieraj sam dla .md)"
+
+msgid "Restore previous session on startup"
+msgstr "Przywracaj poprzednią sesję przy starcie"
+
+msgid "Type to search files…"
+msgstr "Wpisz, aby szukać plików…"
+
+msgid "Quick Open"
+msgstr "Szybkie otwieranie"
+
+msgid "New tab"
+msgstr "Nowa zakładka"
+
+msgid "New window"
+msgstr "Nowe okno"
+
+msgid "Open file"
+msgstr "Otwórz plik"
+
+msgid "Open / add project"
+msgstr "Otwórz lub dodaj projekt"
+
+msgid "Save As"
+msgstr "Zapisz jako"
+
+msgid "Close tab"
+msgstr "Zamknij zakładkę"
+
+msgid "Close window"
+msgstr "Zamknij okno"
+
+msgid "Next tab"
+msgstr "Następna zakładka"
+
+msgid "Previous tab"
+msgstr "Poprzednia zakładka"
+
+msgid "Quick Open file"
+msgstr "Szybkie otwieranie pliku"
+
+msgid "Go to symbol in file"
+msgstr "Przejdź do symbolu w pliku"
+
+msgid "Go to line"
+msgstr "Przejdź do linii"
+
+msgid "Find"
+msgstr "Znajdź"
+
+msgid "Format current file"
+msgstr "Sformatuj bieżący plik"
+
+msgid "New file in selected folder"
+msgstr "Nowy plik w zaznaczonym katalogu"
+
+msgid "New folder in selected folder"
+msgstr "Nowy katalog w zaznaczonym katalogu"
+
+msgid "Find in selected file/folder"
+msgstr "Znajdź w zaznaczonym pliku lub katalogu"
+
+msgid "Replace in selected file/folder"
+msgstr "Zamień w zaznaczonym pliku lub katalogu"
+
+msgid "Toggle sidebar"
+msgstr "Przełącz panel boczny"
+
+msgid "Toggle terminal"
+msgstr "Przełącz terminal"
+
+msgid "New terminal"
+msgstr "Nowy terminal"
+
+msgid "Toggle Markdown preview"
+msgstr "Przełącz podgląd Markdown"
+
+msgid "File"
+msgstr "Plik"
+
+msgid "Navigation"
+msgstr "Nawigacja"
+
+msgid "Edit & search"
+msgstr "Edycja i wyszukiwanie"
+
+msgid "View"
+msgstr "Widok"
+
+msgid "Terminal"
+msgstr "Terminal"
+
+msgid "Add Project (Ctrl+Shift+O)"
+msgstr "Dodaj projekt (Ctrl+Shift+O)"
+
+msgid "Close project"
+msgstr "Zamknij projekt"
+
+msgid "Folder"
+msgstr "Katalog"
+
+msgid "New File…"
+msgstr "Nowy plik…"
+
+msgid "New Folder…"
+msgstr "Nowy katalog…"
+
+msgid "Projects"
+msgstr "Projekty"
+
+msgid "Find in {scope}…"
+msgstr "Znajdź w {scope}…"
+
+msgid "Replace in {scope}…"
+msgstr "Zamień w {scope}…"
+
+msgid "New terminal (Ctrl+Shift+`)"
+msgstr "Nowy terminal (Ctrl+Shift+`)"
+
+msgid "Hide terminal (Ctrl+`)"
+msgstr "Ukryj terminal (Ctrl+`)"
+
+msgid "Close terminal"
+msgstr "Zamknij terminal"
+
+msgid "Terminal {n}"
+msgstr "Terminal {n}"
+
+msgid "Toggle sidebar (F9)"
+msgstr "Przełącz panel boczny (F9)"
+
+msgid "New tab (Ctrl+T)"
+msgstr "Nowa zakładka (Ctrl+T)"
+
+msgid "Open (Ctrl+O)"
+msgstr "Otwórz (Ctrl+O)"
+
+msgid "Save (Ctrl+S)"
+msgstr "Zapisz (Ctrl+S)"
+
+msgid "Format (Ctrl+Shift+I)"
+msgstr "Formatuj (Ctrl+Shift+I)"
+
+msgid "Command Palette…"
+msgstr "Paleta poleceń…"
+
+msgid "Quick Open…"
+msgstr "Szybkie otwieranie…"
+
+msgid "Find in Files…"
+msgstr "Znajdź w plikach…"
+
+msgid "New Terminal"
+msgstr "Nowy terminal"
+
+msgid "Toggle Markdown Preview"
+msgstr "Przełącz podgląd Markdown"
+
+msgid "Edit"
+msgstr "Edycja"
+
+msgid "What's New"
+msgstr "Co nowego"
+
+msgid "Help"
+msgstr "Pomoc"
+
+msgid "New File"
+msgstr "Nowy plik"
+
+msgid "New Folder"
+msgstr "Nowy katalog"
+
+msgid "Open File…"
+msgstr "Otwórz plik…"
+
+msgid "Markdown preview unavailable in this build"
+msgstr "Podgląd Markdown niedostępny w tej wersji"
+
+msgid "Open a project first to create files"
+msgstr "Najpierw otwórz projekt, aby tworzyć pliki"
+
+msgid "Open a project first to create folders"
+msgstr "Najpierw otwórz projekt, aby tworzyć katalogi"
+
+msgid "File name cannot contain '/'."
+msgstr "Nazwa pliku nie może zawierać znaku '/'."
+
+msgid "Find/Replace needs an open project or file"
+msgstr "Znajdź i zamień wymaga otwartego projektu lub pliku"
+
+msgid "OK"
+msgstr "OK"
+
+msgid "Quick Open needs an open project (Ctrl+Shift+O) or an open file"
+msgstr "Szybkie otwieranie wymaga otwartego projektu (Ctrl+Shift+O) lub pliku"
+
+msgid "Find in Files needs an open project or an open file"
+msgstr "Znajdowanie w plikach wymaga otwartego projektu lub pliku"
+
+msgid "File name in {dir}:"
+msgstr "Nazwa pliku w {dir}:"
+
+msgid "Folder name in {dir}:"
+msgstr "Nazwa katalogu w {dir}:"
+
+msgid "Cannot create file"
+msgstr "Nie można utworzyć pliku"
+
+msgid "Created {name}"
+msgstr "Utworzono {name}"
+
+msgid "Cannot create folder"
+msgstr "Nie można utworzyć katalogu"
+
+msgid "Created {name}/"
+msgstr "Utworzono {name}/"
+
+msgid "Cannot read file (snap confinement)"
+msgstr "Nie można odczytać pliku (ograniczenia snapa)"
+
+msgid "Apedi installed from the snap store can only read files inside your home folder or on removable media.\n\nTried to open:\n{path}\n\nMove the file under your home folder, or install Apedi outside snap to access system paths."
+msgstr "Apedi ze sklepu snap czyta tylko pliki z Twojego katalogu domowego i z nośników wymiennych.\n\nPróba otwarcia:\n{path}\n\nPrzenieś plik do katalogu domowego albo zainstaluj Apedi poza snapem, aby mieć dostęp do ścieżek systemowych."
+
+msgid "Open in Browser"
+msgstr "Otwórz w przeglądarce"
+
+msgid "Open in Browser works on HTML files"
+msgstr "Otwieranie w przeglądarce działa dla plików HTML"
+
+msgid "Apedi is the default application for HTML - set a browser instead"
+msgstr "Apedi jest domyślną aplikacją dla HTML - ustaw przeglądarkę"
+
+msgid "Cannot open {name}: {error}"
+msgstr "Nie można otworzyć {name}: {error}"
+
+msgid "Opened {name} in the browser"
+msgstr "Otwarto {name} w przeglądarce"
