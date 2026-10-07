@@ -44,6 +44,9 @@ _STRUCTURAL = re.compile(
 
 _FENCE = re.compile(r"^(```|~~~)")
 
+# List markers, whose wrapped continuations line up with the text after them.
+_LIST_MARKER = re.compile(r"^(?:[-*+•]|\d+[.)])[ \t]+")
+
 # GtkSourceView language ids whose line breaks carry no meaning, so re-joining
 # them is safe. Everything else — every programming language — is excluded: a
 # statement that happens to run past UNWRAP_MIN_LEN would otherwise be glued to
@@ -80,35 +83,51 @@ def _indent_for(width: int, tab_width: int, use_spaces: bool) -> str:
     return "\t" * (width // tab_width) + " " * (width % tab_width)
 
 
+def _continuation_column(line: str, tab_width: int) -> int:
+    """Column where a wrapped continuation of `line` starts.
+
+    For a list item that is the column of its text, not of its marker: a
+    terminal indents what it pushes onto the next row to line up under it.
+    """
+    indent, body = _leading_width(line, tab_width)
+    marker = _LIST_MARKER.match(body)
+    return indent + (len(marker.group(0)) if marker else 0)
+
+
 def _unwrap(lines: list[str], tab_width: int) -> list[str]:
     """Join lines that look hard-wrapped back into single paragraphs."""
     out: list[str] = []
     in_fence = False
+    allowed = 0  # deepest indent that still counts as a continuation of out[-1]
     for line in lines:
         if _FENCE.match(line.lstrip()):
             in_fence = not in_fence
             out.append(line)
+            allowed = _continuation_column(line, tab_width)
             continue
         if in_fence or not line or not out or not out[-1]:
             out.append(line)
+            allowed = _continuation_column(line, tab_width)
             continue
         prev = out[-1]
         # Short previous line — it ended where it meant to.
         if len(prev) < UNWRAP_MIN_LEN:
             out.append(line)
+            allowed = _continuation_column(line, tab_width)
             continue
         # A bullet, heading, table row or rule begins its own block. (A
         # structural *previous* line is fine: that is a wrapped list item, and
         # pulling its continuation back up is exactly right.)
         if _STRUCTURAL.match(line.lstrip()):
             out.append(line)
+            allowed = _continuation_column(line, tab_width)
             continue
-        # Deeper indentation means a nested block (code, a sub-item) — never a
-        # wrap. Equal or shallower is fine: a terminal wrapping a line does not
-        # re-indent what it pushed onto the next row, so the continuation of an
-        # indented paragraph very often arrives in column 0.
-        if _leading_width(line, tab_width)[0] > _leading_width(prev, tab_width)[0]:
+        # Indented past the text column is a nested block (code, a sub-item) —
+        # never a wrap. Up to it is fine: a wrapped list item lines up under its
+        # own text, and a terminal that drops the indent leaves it in column 0.
+        if _leading_width(line, tab_width)[0] > allowed:
             out.append(line)
+            allowed = _continuation_column(line, tab_width)
             continue
         out[-1] = prev + " " + line.lstrip()
     return out

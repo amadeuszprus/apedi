@@ -3,6 +3,27 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.24] - 2026-10-07
+
+### Added
+- **Copy File and Copy File Path** in the editor's right-click menu and the file tree's, so a file can be pasted straight into the file manager.
+
+### Fixed
+- **The markdown preview no longer goes blank** when the text holds a raw HTML tag such as a lone `<h3>`, which used to break the whole page.
+
+## [0.7.23] - 2026-09-30
+
+### Fixed
+- **Normalize Whitespace re-joins wrapped list items**, which stayed broken apart whenever the terminal lined their continuations up under the item's text.
+- **Normalizing without a selection now says** when the text still has wrapped lines that a selection would re-join.
+
+## [0.7.22] - 2026-09-29
+
+### Fixed
+- **Opening a file from the file manager no longer wipes the project list**, which happened whenever the file sat outside every saved project.
+- **The 'Open with' override is written to your real home**, so one left behind by a run outside the snap no longer hides Apedi from the file manager for good.
+- **Apedi names the file that hides it** when it cannot delete it itself, and Preferences greys out the switch that cannot work there.
+
 ## [0.7.21] - 2026-09-28
 
 ### Added

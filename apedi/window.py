@@ -173,6 +173,7 @@ class EditorTab(Gtk.Paned):
         while something is selected, since that is the scope it acts on."""
         self._selection_menu = Gio.Menu()
         self._html_menu = Gio.Menu()
+        self._file_menu = Gio.Menu()
         split_menu = Gio.Menu()
         split_menu.append(_("Split Editor"), "win.split-editor")
         split_menu.append(_("Move Tab to Other Group"), "win.move-to-other-group")
@@ -180,6 +181,7 @@ class EditorTab(Gtk.Paned):
         menu = Gio.Menu()
         menu.append_section(None, self._selection_menu)
         menu.append_section(None, self._html_menu)
+        menu.append_section(None, self._file_menu)
         menu.append_section(None, split_menu)
         self.view.set_extra_menu(menu)
 
@@ -193,10 +195,18 @@ class EditorTab(Gtk.Paned):
             if browser.is_html_path(self.buffer.path):
                 self._html_menu.append(_("Open in Browser"), "win.open-in-browser")
 
+        def sync_file(*_args: object) -> None:
+            self._file_menu.remove_all()
+            if self.buffer.path is not None:
+                self._file_menu.append(_("Copy File"), "win.copy-file")
+                self._file_menu.append(_("Copy File Path"), "win.copy-file-path")
+
         self.connect_buffer("notify::has-selection", sync)
         self.connect_buffer("notify::path-str", sync_html)
+        self.connect_buffer("notify::path-str", sync_file)
         sync()
         sync_html()
+        sync_file()
 
     def _rewire_monitor(self) -> None:
         if self._monitor is not None:
@@ -421,6 +431,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         super().__init__(application=app, default_width=960, default_height=640)
         self.settings = settings
         self._deferred_init_done = False
+        self._projects_restored = False
         self.set_title("Apedi")
         self._git = GitTracker()
         self._git.on_repo_changed = self._on_repo_changed
@@ -655,10 +666,23 @@ class EditorWindow(Gtk.ApplicationWindow):
                 self.terminal_panel.on_empty = self._terminal_emptied
                 self.vpaned.set_end_child(self.terminal_panel)
                 self._apply_terminal_visibility()
-            self._restore_last_project()
+            self._ensure_projects_restored()
+            self._warn_about_stranded_override()
         except Exception:
             log.exception("deferred window init failed")
         return False
+
+    def _warn_about_stranded_override(self) -> None:
+        """A leftover override hides Apedi from the file manager and the snap cannot delete it."""
+        from . import desktop_integration
+
+        if not self.settings.register_in_file_manager:
+            return
+        stranded = desktop_integration.stranded_override()
+        if stranded is not None:
+            self._set_status(
+                _("Apedi is hidden from the file manager by {path} - delete that file").format(path=stranded)
+            )
 
     def _build_terminal_panel(self) -> "Gtk.Widget | None":
         try:
@@ -733,6 +757,17 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.sidebar_pane.set_visible(self.settings.show_sidebar)
         self.sidebar.set_compact(self.settings.sidebar_compact)
         self.sidebar.update_extra_patterns(list(self.settings.ignore_patterns))
+
+    def _ensure_projects_restored(self) -> None:
+        """Load the saved projects before anything reads or rewrites the list.
+
+        Opening a file from the file manager runs before the deferred init, and
+        persisting an empty sidebar then wiped every saved project.
+        """
+        if self._projects_restored:
+            return
+        self._projects_restored = True
+        self._restore_last_project()
 
     def _restore_last_project(self) -> None:
         paths_str = list(self.settings.projects)
@@ -819,6 +854,8 @@ class EditorWindow(Gtk.ApplicationWindow):
             ("jump-bracket", lambda *_: self._edit(lambda t: t.view.emit("move-to-matching-bracket", False))),
             ("open-backups", self.action_open_backups),
             ("open-in-browser", self.action_open_in_browser),
+            ("copy-file", self.action_copy_file),
+            ("copy-file-path", self.action_copy_file_path),
             ("toggle-wrap", self.action_toggle_wrap),
             ("toggle-line-numbers", self.action_toggle_line_numbers),
             ("toggle-minimap", self.action_toggle_minimap),
@@ -1238,6 +1275,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         """If file is outside every open project, add a new project rooted at
         its git root or parent directory and reveal it. In-project opens just
         reveal."""
+        self._ensure_projects_restored()
         try:
             resolved = file_path.resolve()
         except OSError:
@@ -1578,11 +1616,20 @@ class EditorWindow(Gtk.ApplicationWindow):
             tab_width=self.settings.tab_width,
             use_spaces=self.settings.use_spaces,
         )
+        lang = tab.buffer.get_language()
+        # Re-joining is selection-only, so say when the file has wrapped lines to re-join.
+        wrapped = normalize.may_unwrap(lang.get_id() if lang is not None else None) and cleaned != normalize.normalize_text(
+            text,
+            tab_width=self.settings.tab_width,
+            use_spaces=self.settings.use_spaces,
+            unwrap=True,
+        )
+        hint = _(" - select the text to also re-join wrapped lines") if wrapped else ""
         if cleaned == text:
-            self._set_status(_("Whitespace already normalized"))
+            self._set_status(_("Whitespace already normalized") + hint)
             return
         tab.buffer.replace_text_preserving_cursor(cleaned)
-        self._set_status(_("Normalized whitespace"))
+        self._set_status(_("Normalized whitespace") + hint)
 
     def action_open_backups(self, *_args: object) -> None:
         from . import backups
@@ -1595,6 +1642,36 @@ class EditorWindow(Gtk.ApplicationWindow):
             return
         launcher = Gtk.FileLauncher.new(Gio.File.new_for_path(str(directory)))
         launcher.launch(self, None, lambda *_: None)
+
+    def action_copy_file(self, *_args: object) -> None:
+        tab = self.current_tab()
+        if tab is not None and tab.buffer.path is not None:
+            self._copy_file(tab.buffer.path)
+
+    def action_copy_file_path(self, *_args: object) -> None:
+        tab = self.current_tab()
+        if tab is not None and tab.buffer.path is not None:
+            self._copy_file_path(tab.buffer.path)
+
+    def _copy_file(self, path: Path) -> None:
+        """Put the file on the clipboard so a file manager can paste it."""
+        gfile = Gio.File.new_for_path(str(path))
+        uri = gfile.get_uri()
+        provider = Gdk.ContentProvider.new_union([
+            Gdk.ContentProvider.new_for_value(Gdk.FileList.new_from_list([gfile])),
+            Gdk.ContentProvider.new_for_bytes(
+                "x-special/gnome-copied-files", GLib.Bytes.new(f"copy\n{uri}".encode())
+            ),
+            Gdk.ContentProvider.new_for_bytes(
+                "text/plain;charset=utf-8", GLib.Bytes.new(str(path).encode())
+            ),
+        ])
+        self.get_clipboard().set_content(provider)
+        self._set_status(_("Copied file {name}").format(name=path.name))
+
+    def _copy_file_path(self, path: Path) -> None:
+        self.get_clipboard().set(str(path))
+        self._set_status(_("Copied path {path}").format(path=path))
 
     def action_open_in_browser(self, *_args: object) -> None:
         """Show an HTML file in the desktop's browser, saving it first if it has unsaved edits."""
@@ -1720,6 +1797,8 @@ class EditorWindow(Gtk.ApplicationWindow):
             app.broadcast_settings(self.settings)
 
     def _persist_projects(self) -> None:
+        if not self._projects_restored:
+            return  # never save over the stored list before it has been read
         self.settings.projects = [str(p) for p in self.sidebar.projects()]
         if self.settings.projects:
             self.settings.last_project = self.settings.projects[-1]
@@ -1925,10 +2004,14 @@ class EditorWindow(Gtk.ApplicationWindow):
             "replace": self.action_sidebar_replace,
             "replace-with": self.action_sidebar_replace_with,
             "open-in-browser": self.action_open_in_browser,
+            "copy-file": lambda: self._copy_file(path),
+            "copy-file-path": lambda: self._copy_file_path(path),
         }
         handler = handlers.get(action_id)
         if handler is not None:
             handler()
+        if action_id in ("copy-file", "copy-file-path"):
+            self.sidebar.clear_context_path()
 
     def _sidebar_target_dir(self) -> Path | None:
         path = self.sidebar.get_context_path()

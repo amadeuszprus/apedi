@@ -858,3 +858,24 @@ msgstr "Nie można otworzyć {name}: {error}"
 
 msgid "Opened {name} in the browser"
 msgstr "Otwarto {name} w przeglądarce"
+
+msgid "Apedi is hidden from the file manager by {path} - delete that file"
+msgstr "Apedi jest ukryty przed menedżerem plików przez {path} - usuń ten plik"
+
+msgid "Unavailable here: Apedi cannot write to {dir}"
+msgstr "Niedostępne tutaj: Apedi nie może pisać do {dir}"
+
+msgid " - select the text to also re-join wrapped lines"
+msgstr " - zaznacz tekst, aby scalić też zawinięte linie"
+
+msgid "Copy File"
+msgstr "Kopiuj plik"
+
+msgid "Copy File Path"
+msgstr "Kopiuj ścieżkę pliku"
+
+msgid "Copied file {name}"
+msgstr "Skopiowano plik {name}"
+
+msgid "Copied path {path}"
+msgstr "Skopiowano ścieżkę {path}"

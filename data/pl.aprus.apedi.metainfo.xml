@@ -36,6 +36,15 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.24" date="2026-10-07">
+      <description><p>Copy File and Copy File Path in the editor and file tree menus, and the markdown preview no longer goes blank when the text holds a raw HTML tag such as a lone <code>&lt;h3&gt;</code>.</p></description>
+    </release>
+    <release version="0.7.23" date="2026-09-30">
+      <description><p>Normalize Whitespace now re-joins wrapped list items instead of leaving every continuation line on its own.</p></description>
+    </release>
+    <release version="0.7.22" date="2026-09-29">
+      <description><p>Opening a file from the file manager no longer clears the list of open projects, and a leftover 'Open with' override can no longer hide Apedi from the file manager for good.</p></description>
+    </release>
     <release version="0.7.21" date="2026-09-28">
       <description><p>Split editor, Go to Symbol in Project, tasks, Replace in Files with a per-match preview, a markdown outline with inline images and HTML or PDF export, opening HTML files in the browser, and a terminal that keeps shell shortcuts and gains copy and paste.</p></description>
     </release>

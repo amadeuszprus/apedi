@@ -316,6 +316,26 @@ def test_nested_lists_indent() -> None:
     assert "\n    • c" in m
 
 
+def _assert_balanced(markup: str) -> None:
+    import xml.etree.ElementTree as ET
+
+    ET.fromstring(f"<markup>{markup}</markup>")
+
+
+@pytestmark_md
+def test_raw_unclosed_html_tag_stays_balanced() -> None:
+    m = mp.render_blocks("Now has no <h3> (index page).\n\nNext paragraph.")[0].pango_markup
+    _assert_balanced(m)
+    assert m.index("</span>") < m.index("Next paragraph")
+
+
+@pytestmark_md
+def test_raw_stray_closing_tag_is_ignored() -> None:
+    m = mp.render_blocks("Text </b></h2> more **bold**")[0].pango_markup
+    _assert_balanced(m)
+    assert "<b>bold</b>" in m
+
+
 def test_style_contains_new_selectors() -> None:
     # Verify the CSS bytes are present without importing the module,
     # since `apedi.style` requires GObject-Introspection at import time.

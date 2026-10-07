@@ -266,3 +266,54 @@ def test_unwrap_would_corrupt_code_which_is_why_it_is_gated() -> None:
     )
     assert "arg3) return result" in normalize.normalize_text(src, unwrap=True)
     assert normalize.normalize_text(src, unwrap=False) == src
+
+
+# ---------- hanging indents (terminal-wrapped lists) ----------
+
+SAMPLE = (
+    "  1. Model wdrozenia i pChart (D2). Czy CareSocial to czysty SaaS, czy kod laduje na serwerach klientow? Biblioteka\n"
+    "     pChart jest na licencji GPLv3, a ta naklada obowiazki tylko przy dystrybucji programu. Jesli jest dystrybucja:\n"
+    "     kupujemy licencje komercyjna od autora pChart, czy wymieniamy biblioteke?\n"
+    "  2. Fonty Arial w TCPDF (D3). Kupujemy licencje, czy podmieniamy na darmowy Liberation Sans i porownujemy wydruki\n"
+    "     przed i po? Potrzebne przed 2.4.\n"
+)
+
+
+def test_wrapped_numbered_list_becomes_one_line_per_item() -> None:
+    out = normalize.normalize_text(SAMPLE, unwrap=True).rstrip("\n").split("\n")
+    assert len(out) == 2
+    assert out[0].startswith("1. Model wdrozenia") and out[0].endswith("wymieniamy biblioteke?")
+    assert out[1].startswith("2. Fonty Arial") and out[1].endswith("Potrzebne przed 2.4.")
+
+
+def test_wrapped_bullet_list_joins_at_the_text_column() -> None:
+    text = (
+        "- Pierwszy punkt listy, ktory jest wystarczajaco dlugi, zeby terminal zawinal go w kolejna linie\n"
+        "  i tu jest jego dalszy ciag.\n"
+        "- Drugi punkt.\n"
+    )
+    assert normalize.normalize_text(text, unwrap=True).split("\n")[0].endswith("dalszy ciag.")
+
+
+def test_nested_bullet_under_an_item_stays_its_own_line() -> None:
+    text = (
+        "1. Punkt pierwszy, dostatecznie dlugi, zeby przekroczyc prog dlugosci potrzebny do laczenia linii\n"
+        "   - zagniezdzony podpunkt\n"
+    )
+    assert len(normalize.normalize_text(text, unwrap=True).rstrip("\n").split("\n")) == 2
+
+
+def test_indented_block_under_an_item_stays_separate() -> None:
+    text = (
+        "1. Punkt pierwszy, dostatecznie dlugi, zeby przekroczyc prog dlugosci potrzebny do laczenia linii\n"
+        "       kod_ktory_nie_jest_kontynuacja()\n"
+    )
+    assert len(normalize.normalize_text(text, unwrap=True).rstrip("\n").split("\n")) == 2
+
+
+def test_indented_block_under_a_paragraph_stays_separate() -> None:
+    text = (
+        "Akapit ktory jest dostatecznie dlugi, zeby w ogole rozwazac laczenie go z nastepna linia tekstu\n"
+        "    wciety blok pod akapitem\n"
+    )
+    assert len(normalize.normalize_text(text, unwrap=True).rstrip("\n").split("\n")) == 2

@@ -12,6 +12,8 @@ import logging
 import os
 from pathlib import Path
 
+from .shell import real_home
+
 log = logging.getLogger(__name__)
 
 _OVERRIDE_BODY = (
@@ -22,17 +24,45 @@ _OVERRIDE_BODY = (
     "Hidden=true\n"
 )
 
+_writable: bool | None = None
+
 
 def _override_path() -> Path:
+    # The real home, not $HOME: inside a snap that points at the snap's own data directory.
     snap_name = os.environ.get("SNAP_INSTANCE_NAME", "apedi")
-    app_name = "apedi"
-    return Path.home() / ".local" / "share" / "applications" / f"{snap_name}_{app_name}.desktop"
+    return real_home() / ".local" / "share" / "applications" / f"{snap_name}_apedi.desktop"
 
 
-def apply(register: bool) -> None:
-    """If register=True, remove the user-local override.
+def available() -> bool:
+    """Whether the entry can be changed at all; a confined snap cannot write there."""
+    global _writable
+    if _writable is None:
+        probe = _override_path().with_suffix(".apedi-probe")
+        try:
+            probe.parent.mkdir(parents=True, exist_ok=True)
+            probe.write_text("", encoding="utf-8")
+            probe.unlink()
+            _writable = True
+        except OSError:
+            _writable = False
+    return _writable
+
+
+def is_hidden() -> bool:
+    """Whether an override is currently hiding Apedi from the file manager."""
+    try:
+        return "Hidden=true" in _override_path().read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def apply(register: bool) -> bool:
+    """Write or remove the override; False means the desktop entry could not be changed.
+
+    If register=True, remove the user-local override.
     If register=False, write the override that hides Apedi from the launcher
-    and from file-manager 'Open with' lists."""
+    and from file-manager 'Open with' lists.
+    """
     path = _override_path()
     try:
         if register:
@@ -45,3 +75,12 @@ def apply(register: bool) -> None:
             log.info("wrote desktop override at %s", path)
     except OSError as e:
         log.warning("desktop override update failed: %s", e)
+        return False
+    return True
+
+
+def stranded_override() -> Path | None:
+    """An override left by a run outside the snap, which the snap cannot delete itself."""
+    if is_hidden() and not available():
+        return _override_path()
+    return None

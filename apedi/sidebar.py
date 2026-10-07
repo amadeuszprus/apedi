@@ -613,6 +613,10 @@ class ProjectSidebar(Gtk.Box):
         if not is_dir and is_html_path(path):
             add_button(_("Open in Browser"), "open-in-browser")
             add_separator()
+        if not is_dir:
+            add_button(_("Copy File"), "copy-file")
+            add_button(_("Copy File Path"), "copy-file-path")
+            add_separator()
         add_button(_("Find in {scope}…").format(scope=scope_label), "find")
         add_button(_("Replace in {scope}…").format(scope=scope_label), "replace")
         add_button(_("Replace with…"), "replace-with")

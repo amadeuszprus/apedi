@@ -154,6 +154,15 @@ class PreferencesDialog(Gtk.Window):
         page.add(_("Restore previous session on startup"), self.restore_session_switch)
 
         self.fm_switch = self._switch(self.settings.register_in_file_manager)
+        from . import desktop_integration
+
+        if not desktop_integration.available():
+            self.fm_switch.set_sensitive(False)
+            self.fm_switch.set_tooltip_text(
+                _("Unavailable here: Apedi cannot write to {dir}").format(
+                    dir=desktop_integration._override_path().parent,
+                )
+            )
         page.add(_("Show in file manager 'Open with' menu"), self.fm_switch)
 
         self.language_combo = self._build_language_combo()

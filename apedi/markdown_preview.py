@@ -211,6 +211,9 @@ _HEADING_SPANS = {
 
 _HR = "─" * 60
 
+# Tags whose closing markup the builder must emit, so raw HTML cannot unbalance it.
+_PAIRED = {*_HEADING_SPANS, "strong", "b", "em", "i", "code", "pre", "a", "blockquote", "p", "li"}
+
 
 class _PangoBuilder(HTMLParser):
     """Walks markdown's HTML output and emits Pango markup.
@@ -236,6 +239,7 @@ class _PangoBuilder(HTMLParser):
         self._heading_underline_char: str | None = None
         self._li_pending_task: bool = False
         self._quote_depth: int = 0
+        self._open: list[str] = []
 
     # ---- helpers ----
 
@@ -252,6 +256,8 @@ class _PangoBuilder(HTMLParser):
             self._emit("• ")
             self._li_pending_task = False
         attrs_d = dict(attrs)
+        if tag in _PAIRED:
+            self._open.append(tag)
         if tag in _HEADING_SPANS:
             self._emit(_HEADING_SPANS[tag])
             if tag == "h1":
@@ -310,6 +316,21 @@ class _PangoBuilder(HTMLParser):
         if self._li_pending_task:
             self._emit("• ")
             self._li_pending_task = False
+        if tag in _PAIRED:
+            if tag not in self._open:
+                return
+            while self._open:
+                opened = self._open.pop()
+                self._close(opened)
+                if opened == tag:
+                    return
+        elif tag in ("ul", "ol"):
+            if self.list_stack:
+                self.list_stack.pop()
+            if not self.list_stack:
+                self._emit("\n")
+
+    def _close(self, tag: str) -> None:
         if tag in _HEADING_SPANS:
             self._emit("</span>\n")
             if tag in ("h1", "h2") and self._heading_char_count is not None:
@@ -328,16 +349,11 @@ class _PangoBuilder(HTMLParser):
         elif tag == "pre":
             self.in_pre = False
             self._emit("</span>\n")
+        elif tag == "a":
+            self._emit("</a>")
         elif tag == "p":
             if not self.cell_mode:
                 self._emit("\n\n")
-        elif tag == "a":
-            self._emit("</a>")
-        elif tag in ("ul", "ol"):
-            if self.list_stack:
-                self.list_stack.pop()
-            if not self.list_stack:
-                self._emit("\n")
         elif tag == "blockquote":
             self._emit("</span></i>\n")
             self._quote_depth = max(0, self._quote_depth - 1)
@@ -369,6 +385,8 @@ class _PangoBuilder(HTMLParser):
     # ---- final ----
 
     def result(self) -> str:
+        while self._open:
+            self._close(self._open.pop())
         # Collapse multiple blank lines down to two at most
         text = "".join(self.out).strip()
         while "\n\n\n" in text:
