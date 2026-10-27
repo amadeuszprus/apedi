@@ -9,6 +9,7 @@ from apedi import formatters
 def test_supports_known_language() -> None:
     assert formatters.supports("python3") is True
     assert formatters.supports("rust") is True
+    assert formatters.supports("apedi-markdown") is True
     assert formatters.supports(None) is False
     assert formatters.supports("brainfuck") is False
 

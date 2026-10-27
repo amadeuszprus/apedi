@@ -52,7 +52,7 @@ _LIST_MARKER = re.compile(r"^(?:[-*+•]|\d+[.)])[ \t]+")
 # statement that happens to run past UNWRAP_MIN_LEN would otherwise be glued to
 # the next one, silently producing code that no longer parses. `None` (plain
 # text: .txt, .log, an unsaved buffer) is the common case for terminal output.
-PROSE_LANGUAGES = frozenset({"markdown", "rst", "asciidoc", "textile", "gtk-doc"})
+PROSE_LANGUAGES = frozenset({"markdown", "apedi-markdown", "rst", "asciidoc", "textile", "gtk-doc"})
 
 
 def may_unwrap(language_id: str | None) -> bool:

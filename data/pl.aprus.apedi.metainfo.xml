@@ -36,6 +36,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.25" date="2026-10-27">
+      <description><p>A substantially more readable Markdown preview with larger typography, stronger spacing and hierarchy, full syntax-highlighted code blocks inside lists, more source width while previewing, and a fix for source highlighting that leaked past indented code fences.</p></description>
+    </release>
     <release version="0.7.24" date="2026-10-07">
       <description><p>Copy File and Copy File Path in the editor and file tree menus, and the markdown preview no longer goes blank when the text holds a raw HTML tag such as a lone <code>&lt;h3&gt;</code>.</p></description>
     </release>

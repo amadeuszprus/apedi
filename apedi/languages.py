@@ -17,16 +17,24 @@ def manager() -> GtkSource.LanguageManager:
     global _manager
     if _manager is None:
         _manager = GtkSource.LanguageManager.get_default()
+        bundled = Path(__file__).with_name("data") / "language-specs"
+        if bundled.is_dir():
+            _manager.prepend_search_path(str(bundled))
     return _manager
 
 
 _HTML_FALLBACK_SUFFIXES = {".vue", ".svelte"}
+_MARKDOWN_SUFFIXES = {".md", ".markdown", ".mdown", ".mkd", ".mkdn"}
 
 
 def language_for_path(path: Path | None, content: str | None = None) -> GtkSource.Language | None:
     """Guess language by filename + content type. Returns None when unknown."""
     if path is None:
         return None
+    if path.suffix.lower() in _MARKDOWN_SUFFIXES:
+        custom = manager().get_language("apedi-markdown")
+        if custom is not None:
+            return custom
     filename = path.name
     content_type = None
     if content is not None:

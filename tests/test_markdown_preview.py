@@ -244,6 +244,31 @@ def test_render_splits_prose_and_code() -> None:
 
 
 @pytestmark_md
+def test_fenced_code_nested_in_list_is_a_highlightable_block() -> None:
+    src = "1. inspect\n\n    ```bash\n    echo '$HOME'\n    ```\n\n    continue\n"
+    blocks = mp.render_blocks(src)
+    code = [block for block in blocks if isinstance(block, mp.CodeBlock)]
+    assert len(code) == 1
+    assert code[0].lang == "bash"
+    assert code[0].text == "echo '$HOME'"
+
+
+@pytestmark_md
+def test_nested_code_block_preserves_ordered_list_numbering() -> None:
+    src = (
+        "1. first\n\n"
+        "    ```bash\n    echo one\n    ```\n\n"
+        "2. second\n"
+    )
+    blocks = mp.render_blocks(src)
+    prose = "\n".join(
+        block.pango_markup for block in blocks if isinstance(block, mp.ProseBlock)
+    )
+    assert "1. first" in prose
+    assert "2. second" in prose
+
+
+@pytestmark_md
 def test_code_block_lang_none_when_absent() -> None:
     src = "```\nplain\ntext\n```\n"
     blocks = mp.render_blocks(src)

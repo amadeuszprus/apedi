@@ -29,7 +29,7 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
-version: '0.7.24'
+version: '0.7.25'
 icon: data/apedi-icon-512.png
 contact: aprus@codesty.pl
 donation: https://ko-fi.com/aprus
@@ -68,6 +68,7 @@ parts:
       - black
       - pathspec
       - markdown
+      - pymdown-extensions
     stage-packages:
       - python3-gi
       - gir1.2-gtksource-5

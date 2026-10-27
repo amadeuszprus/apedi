@@ -1906,7 +1906,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         if is_markdown_path(tab.buffer.path):
             return True
         lang = tab.buffer.get_language()
-        return lang is not None and lang.get_id() == "markdown"
+        return lang is not None and lang.get_id() in {"markdown", "apedi-markdown"}
 
     # ---------- markdown outline ----------
 

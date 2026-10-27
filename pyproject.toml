@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apedi"
-version = "0.7.24"
+version = "0.7.25"
 description = "A fast, simple text editor with syntax highlighting and code formatting"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,6 +15,7 @@ dependencies = [
     "chardet>=5.0",
     "pathspec>=0.12",
     "markdown>=3.5",
+    "pymdown-extensions>=10,<11",
 ]
 
 [project.scripts]
@@ -26,6 +27,9 @@ test = ["pytest>=8.0"]
 [tool.setuptools.packages.find]
 include = ["apedi*"]
 exclude = ["tests*", "docs*"]
+
+[tool.setuptools.package-data]
+apedi = ["data/language-specs/*.lang"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

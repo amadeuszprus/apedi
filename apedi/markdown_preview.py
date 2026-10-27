@@ -5,7 +5,7 @@ No WebKit, no HTML — keeps the snap lean and the renderer fast.
 
 Public surface (kept stable from the WebKit-era implementation):
 - `is_markdown_path(path)` — extension check, no GTK needed.
-- `MARKDOWN_AVAILABLE` — True iff python-markdown is importable.
+- `MARKDOWN_AVAILABLE` — True iff the Markdown parser dependencies are importable.
 - `AVAILABLE` — True iff both GTK is available and python-markdown is too.
 - `render_blocks(text)` — pure function, headless-testable.
 - `MarkdownPreview` widget (Gtk.ScrolledWindow):
@@ -110,11 +110,27 @@ def _code_style_scheme(dark: bool):
     return mgr.get_scheme(ids[0]) if ids else None
 
 
-MARKDOWN_AVAILABLE = _importlib_util.find_spec("markdown") is not None
+MARKDOWN_AVAILABLE = (
+    _importlib_util.find_spec("markdown") is not None
+    and _importlib_util.find_spec("pymdownx.superfences") is not None
+)
 _md = None  # populated by _ensure_md() on first render
 
+MARKDOWN_EXTENSIONS = [
+    "pymdownx.highlight",
+    "pymdownx.superfences",
+    "tables",
+    "sane_lists",
+]
+MARKDOWN_EXTENSION_CONFIGS = {
+    # GtkSourceView supplies the colours in the live preview. Asking
+    # SuperFences for raw code keeps the language class and avoids baking
+    # Pygments HTML spans into the block model.
+    "pymdownx.highlight": {"use_pygments": False},
+}
+
 if not MARKDOWN_AVAILABLE:
-    log.info("python-markdown not available — markdown preview disabled")
+    log.info("Markdown parser dependencies unavailable — preview disabled")
 
 
 def _ensure_md() -> bool:
@@ -456,14 +472,21 @@ class _BlockSplitter(HTMLParser):
 
     # ---- helpers ----
 
-    def _flush_prose(self) -> None:
+    def _flush_prose(self, *, preserve_structure: bool = False) -> None:
+        list_stack = list(self._prose.list_stack) if preserve_structure else []
+        quote_depth = self._prose._quote_depth if preserve_structure else 0
+        root = self._prose_root if preserve_structure else None
+        root_depth = self._prose_root_depth if preserve_structure else 0
+        kind = self._prose_kind if preserve_structure else ProseKind.BODY
         markup = self._prose.result().strip()
         if markup:
             self.blocks.append(ProseBlock(markup, self._prose_kind))
         self._prose = _PangoBuilder(dark=False)
-        self._prose_kind = ProseKind.BODY
-        self._prose_root = None
-        self._prose_root_depth = 0
+        self._prose.list_stack = list_stack
+        self._prose._quote_depth = quote_depth
+        self._prose_kind = kind
+        self._prose_root = root
+        self._prose_root_depth = root_depth
 
     @staticmethod
     def _parse_align(style: str) -> Align:
@@ -487,7 +510,7 @@ class _BlockSplitter(HTMLParser):
     def handle_starttag(self, tag, attrs) -> None:
         attrs_d = dict(attrs)
         if tag == "table":
-            self._flush_prose()
+            self._flush_prose(preserve_structure=True)
             self._in_table = True
             self._table_header = None
             self._table_rows = []
@@ -503,7 +526,7 @@ class _BlockSplitter(HTMLParser):
                 self._current_cell.handle_starttag(tag, attrs)
             return
         if tag == "pre":
-            self._flush_prose()
+            self._flush_prose(preserve_structure=True)
             self._in_pre_code = True
             self._code_lang = None
             self._code_chunks = []
@@ -649,9 +672,10 @@ class _BlockSplitter(HTMLParser):
 def render_blocks(text: str) -> list[Block]:
     """Pure markdown → list of block descriptors. Headless-testable."""
     if not _ensure_md():
-        return [ProseBlock(_("python-markdown not installed"))]
+        return [ProseBlock(_("Markdown renderer dependencies not installed"))]
     html = _md.Markdown(
-        extensions=["fenced_code", "tables", "sane_lists"],
+        extensions=MARKDOWN_EXTENSIONS,
+        extension_configs=MARKDOWN_EXTENSION_CONFIGS,
     ).convert(text)
     splitter = _BlockSplitter()
     splitter.feed(html)
@@ -886,7 +910,7 @@ if GTK_AVAILABLE:
 
             if not AVAILABLE:
                 fallback = Gtk.Label()
-                fallback.set_text(_("Markdown preview unavailable (python-markdown missing)"))
+                fallback.set_text(_("Markdown preview unavailable (renderer dependencies missing)"))
                 fallback.set_xalign(0.0)
                 self._box.append(fallback)
 

@@ -33,6 +33,7 @@ FORMATTERS: dict[str, FormatterSpec] = {
     "html": FormatterSpec("prettier", "/lib/node_modules/.bin/prettier", ("--stdin-filepath", "{filename}"), use_filename=True),
     "css": FormatterSpec("prettier", "/lib/node_modules/.bin/prettier", ("--stdin-filepath", "{filename}"), use_filename=True),
     "markdown": FormatterSpec("prettier", "/lib/node_modules/.bin/prettier", ("--stdin-filepath", "{filename}"), use_filename=True),
+    "apedi-markdown": FormatterSpec("prettier", "/lib/node_modules/.bin/prettier", ("--stdin-filepath", "{filename}"), use_filename=True),
     "yaml": FormatterSpec("prettier", "/lib/node_modules/.bin/prettier", ("--stdin-filepath", "{filename}"), use_filename=True),
     "go": FormatterSpec("gofmt", "/usr/bin/gofmt", ()),
     "rust": FormatterSpec("rustfmt", "/usr/bin/rustfmt", ("--emit=stdout", "--quiet")),

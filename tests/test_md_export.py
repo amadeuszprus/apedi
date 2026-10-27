@@ -42,7 +42,7 @@ def test_html_is_self_contained(tmp_path: Path) -> None:
     assert "title: Report" not in html
     assert re.search(r'<img alt="logo" src="data:image/png;base64,[A-Za-z0-9+/=]{100,}"', html)
     assert 'src="https://x.org/a.png"' in html
-    assert "<table>" in html and "<pre><code" in html
+    assert "<table>" in html and "<pre" in html and "<code" in html
     assert "<style>" in html
 
 

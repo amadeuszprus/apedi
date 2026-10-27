@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Markdown highlighting fixes specific to Apedi.
+
+     GtkSourceView's stock grammar only closes fenced code blocks when the
+     closing fence starts in column zero. CommonMark permits fences nested in
+     list items, where both fences are indented. In that case the embedded
+     language otherwise leaks into the rest of the document.
+-->
+<language id="apedi-markdown" name="Markdown" version="2.0" _section="Markup">
+  <metadata>
+    <property name="mimetypes">text/x-markdown</property>
+    <property name="globs">*.markdown;*.md;*.mkd;*.mdown;*.mkdn</property>
+    <property name="block-comment-start">&lt;!--</property>
+    <property name="block-comment-end">--&gt;</property>
+    <property name="suggested-suffix">.md</property>
+  </metadata>
+  <styles>
+    <style id="code-block" name="Code Block" map-to="def:preformatted-section"/>
+  </styles>
+  <definitions>
+    <context id="indented-fenced-code" class="no-spell-check" style-ref="code-block">
+      <start>^[ \t]*(`{3,}|~{3,}).*$</start>
+      <end>^[ \t]*\%{1@start}[ \t]*$</end>
+    </context>
+    <context id="apedi-markdown">
+      <include>
+        <context ref="indented-fenced-code"/>
+        <context ref="markdown:markdown"/>
+      </include>
+    </context>
+  </definitions>
+</language>

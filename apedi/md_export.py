@@ -107,7 +107,10 @@ def to_html(text: str, base: Path | None, fallback_title: str) -> str:
 
     title = document_title(text, fallback_title)
     _meta, body_md = split_front_matter(text)
-    body = markdown.Markdown(extensions=["fenced_code", "tables", "sane_lists"]).convert(body_md)
+    body = markdown.Markdown(
+        extensions=mp.MARKDOWN_EXTENSIONS,
+        extension_configs=mp.MARKDOWN_EXTENSION_CONFIGS,
+    ).convert(body_md)
     body = _inline_images(body, base)
     return (
         "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"

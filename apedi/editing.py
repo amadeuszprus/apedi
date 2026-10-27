@@ -13,8 +13,8 @@ _PAIR_BEFORE = set(" \t\n;:,.=)]}>")
 _EMPTY_PAIRS = {"()", "[]", "{}", '""', "''", "``"}
 
 # Prose languages, where apostrophes and quotes are ordinary punctuation.
-_PROSE = {None, "", "markdown", "text", "latex", "rst", "asciidoc"}
-_BACKTICK_LANGS = {"markdown", "js", "jsx", "typescript", "typescript-jsx", "sh", "go"}
+_PROSE = {None, "", "markdown", "apedi-markdown", "text", "latex", "rst", "asciidoc"}
+_BACKTICK_LANGS = {"markdown", "apedi-markdown", "js", "jsx", "typescript", "typescript-jsx", "sh", "go"}
 
 # GtkSourceView metadata that is wrong for the language.
 _COMMENT_OVERRIDES: dict[str, tuple[str | None, tuple[str, str] | None]] = {

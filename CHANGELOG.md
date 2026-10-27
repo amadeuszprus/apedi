@@ -3,6 +3,17 @@
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.25] - 2026-10-27
+
+### Changed
+- **Rendered Markdown is substantially easier to read:** larger body text, more generous line and block spacing, a narrower reading column, stronger heading hierarchy, clearer quotes and tables, and calmer document surfaces in both light and dark themes.
+- **Fenced code inside lists is now a real full-width code block** with its language label, padding, dedicated surface, and GtkSourceView syntax highlighting instead of a run of inline-code fragments.
+- **The minimap hides while the Markdown preview is open**, giving the source pane back the width it needs; it returns when the preview closes.
+
+### Fixed
+- **Markdown source highlighting no longer leaks past indented code fences.** Apedi now ships a small Markdown grammar extension that correctly closes fenced blocks nested inside list items.
+- **Nested fenced code survives HTML and PDF export as a block**, matching the live preview rather than flattening into inline code.
+
 ## [0.7.24] - 2026-10-07
 
 ### Added
