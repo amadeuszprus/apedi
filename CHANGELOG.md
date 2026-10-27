@@ -5,14 +5,17 @@ versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Fixed
-- **Apedi remembers whether each window was maximized or fullscreen** and restores that state before showing the window on the next launch.
+## [0.7.26] - 2026-10-27
 
 ### Changed
 - **Apedi paints its window before constructing the editor and restoring a session.** The active document returns first, remaining tabs are restored incrementally, and session restore no longer rewrites or repeatedly rebuilds Recent files.
 - **Markdown preview, minimaps and the terminal start only when needed.** Empty and non-Markdown tabs no longer import the renderer, background tabs defer their expensive extras until selected, and a hidden terminal is not constructed during startup.
 - **Startup avoids redundant synchronous work.** Settings are read once, filesystem validation of Recent files and portal theme detection run after the first frame, and project restoration no longer delays the initial window.
 - **Snap builds use LZO compression** to trade a larger download for substantially faster cold decompression.
+
+### Fixed
+- **Apedi remembers whether each window was maximized or fullscreen** and restores that state before showing the window on the next launch.
+- **Normal startup no longer reopens recovery drafts for files already restored from the session,** preventing unchanged documents from appearing modified or prompting to save on exit.
 
 ## [0.7.25] - 2026-10-27
 

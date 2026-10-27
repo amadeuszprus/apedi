@@ -36,6 +36,9 @@
   </categories>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="0.7.26" date="2026-10-27">
+      <description><p>A faster cold start that paints the window first and restores sessions incrementally, defers Markdown preview, minimap and terminal work until needed, uses faster LZO snap compression, remembers maximized and fullscreen state, and avoids reopening restored files as modified recovery drafts.</p></description>
+    </release>
     <release version="0.7.25" date="2026-10-27">
       <description><p>A substantially more readable Markdown preview with larger typography, stronger spacing and hierarchy, full syntax-highlighted code blocks inside lists, more source width while previewing, and a fix for source highlighting that leaked past indented code fences.</p></description>
     </release>
