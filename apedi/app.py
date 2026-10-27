@@ -33,6 +33,7 @@ class EditorApp(Gtk.Application):
         self.settings = _INITIAL_SETTINGS
         self._session_windows: list[dict] = []
         self._session_restored = False
+        self._auto_theme_pending = False
         self.add_main_option(
             "new-window", ord("n"), GLib.OptionFlags.NONE, GLib.OptionArg.NONE,
             "Open in a new window", None,
@@ -173,6 +174,8 @@ class EditorApp(Gtk.Application):
         window.schedule_deferred_init()
         GLib.timeout_add(500, self._maybe_show_whats_new, window)
         GLib.timeout_add(750, self._maybe_restore_drafts, window)
+        if self._auto_theme_pending:
+            GLib.timeout_add(1000, self._refresh_auto_theme)
         if not getattr(self, "_recent_validated", False):
             self._recent_validated = True
             GLib.timeout_add(250, self._validate_recent_after_startup)
@@ -412,6 +415,8 @@ class EditorApp(Gtk.Application):
 
         self.settings = settings
         self._apply_theme(settings.dark_ui)
+        if self._auto_theme_pending:
+            GLib.idle_add(self._refresh_auto_theme)
         desktop_integration.apply(settings.register_in_file_manager)
         for window in self.get_windows():
             if hasattr(window, "apply_settings"):
@@ -435,14 +440,29 @@ class EditorApp(Gtk.Application):
 
     def _apply_theme(self, theme: str) -> None:
         if theme == "auto":
-            prefer_dark = _detect_system_dark()
+            # A synchronous portal call can consume its full 500 ms timeout.
+            # Use the editor scheme as an immediate, usually-correct fallback
+            # and ask the portal only after the first frame.
+            self._auto_theme_pending = True
+            prefer_dark = "dark" in self.settings.color_scheme.casefold()
         elif theme == "dark":
+            self._auto_theme_pending = False
             prefer_dark = True
         else:
+            self._auto_theme_pending = False
             prefer_dark = False
         Gtk.Settings.get_default().set_property(
             "gtk-application-prefer-dark-theme", bool(prefer_dark)
         )
+
+    def _refresh_auto_theme(self) -> bool:
+        if not self._auto_theme_pending or self.settings.dark_ui != "auto":
+            return False
+        self._auto_theme_pending = False
+        Gtk.Settings.get_default().set_property(
+            "gtk-application-prefer-dark-theme", _detect_system_dark()
+        )
+        return False
 
 
 def _detect_system_dark() -> bool:
