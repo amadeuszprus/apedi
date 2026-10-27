@@ -45,11 +45,10 @@ class EditorApp(Gtk.Application):
 
     def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
-        from . import desktop_integration, style as _style
+        from . import style as _style
 
         _style.install()
         self._install_snippet_path()
-        desktop_integration.apply(self.settings.register_in_file_manager)
         self._apply_theme(self.settings.dark_ui)
         quit_action = Gio.SimpleAction.new("quit", None)
         quit_action.connect("activate", lambda *_: self.quit())
@@ -176,6 +175,7 @@ class EditorApp(Gtk.Application):
         GLib.timeout_add(750, self._maybe_restore_drafts, window)
         if self._auto_theme_pending:
             GLib.timeout_add(1000, self._refresh_auto_theme)
+        GLib.timeout_add(1250, self._apply_desktop_integration_after_startup)
         if not getattr(self, "_recent_validated", False):
             self._recent_validated = True
             GLib.timeout_add(250, self._validate_recent_after_startup)
@@ -188,6 +188,12 @@ class EditorApp(Gtk.Application):
 
     def _validate_recent_after_startup(self) -> bool:
         self._rebuild_recent_menu()
+        return False
+
+    def _apply_desktop_integration_after_startup(self) -> bool:
+        from . import desktop_integration
+
+        desktop_integration.apply(self.settings.register_in_file_manager)
         return False
 
     def remember_window(self, state: dict) -> None:
