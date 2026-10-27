@@ -158,6 +158,7 @@ class EditorApp(Gtk.Application):
         else:
             self._populate_initial_window(win, [])
         win.present()
+        GLib.timeout_add(750, self._maybe_restore_drafts, win)
 
     def _populate_initial_window(self, window: EditorWindow, paths: list[Path]) -> bool:
         """Add useful content only after a newly-created window has painted."""
@@ -172,7 +173,6 @@ class EditorApp(Gtk.Application):
             window.add_tab()
         window.schedule_deferred_init()
         GLib.timeout_add(500, self._maybe_show_whats_new, window)
-        GLib.timeout_add(750, self._maybe_restore_drafts, window)
         if self._auto_theme_pending:
             GLib.timeout_add(1000, self._refresh_auto_theme)
         GLib.timeout_add(1250, self._apply_desktop_integration_after_startup)
@@ -353,8 +353,22 @@ class EditorApp(Gtk.Application):
             if not pending:
                 return False
             count = 0
+            open_paths = {
+                tab.buffer.path.resolve()
+                for tab in window.all_tabs()
+                if tab.buffer.path is not None
+            }
             for draft in pending:
                 if not draft.original_path:
+                    continue
+                try:
+                    resolved = draft.original_path.resolve()
+                except OSError:
+                    resolved = draft.original_path
+                # Session restore may already have opened the file.  Never add
+                # a second, modified copy behind the user's back; keep the
+                # draft on disk for explicit recovery instead.
+                if resolved in open_paths:
                     continue
                 # Compare with on-disk state — only offer if differs
                 try:
@@ -372,6 +386,7 @@ class EditorApp(Gtk.Application):
                 buf.load(draft.body, draft.original_path, draft.encoding, draft.base_mtime)
                 buf.set_modified(True)
                 window.add_tab(buf)
+                open_paths.add(resolved)
                 count += 1
             if count:
                 window._set_status(f"Restored {count} draft buffer(s) from previous session")
