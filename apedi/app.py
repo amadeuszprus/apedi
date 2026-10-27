@@ -32,6 +32,7 @@ class EditorApp(Gtk.Application):
         )
         self.settings = _INITIAL_SETTINGS
         self._session_windows: list[dict] = []
+        self._saved_session_windows: list[dict] | None = None
         self._session_restored = False
         self._auto_theme_pending = False
         self.add_main_option(
@@ -136,6 +137,7 @@ class EditorApp(Gtk.Application):
         created = force_new or not self.get_active_window()
         if created:
             window = self.new_window()
+            self._apply_saved_window_mode(window, 0)
         else:
             window = self.get_active_window()
 
@@ -154,6 +156,7 @@ class EditorApp(Gtk.Application):
         win = self.get_active_window()
         if win is None:
             win = self.new_window()
+            self._apply_saved_window_mode(win, 0)
             win.after_first_frame(lambda: self._populate_initial_window(win, []))
         else:
             self._populate_initial_window(win, [])
@@ -210,20 +213,39 @@ class EditorApp(Gtk.Application):
         self._session_restored = True
         if not self.settings.restore_session:
             return False
-        from . import session
-
-        windows = session.load()
+        windows = self._load_saved_session()
         if not windows:
             return False
         # First saved window fills the already-created one; the rest spawn.
         self._schedule_restore(window, windows[0])
-        for extra in windows[1:]:
+        for index, extra in enumerate(windows[1:], start=1):
             w = self.new_window()
+            self._apply_saved_window_mode(w, index)
             w.after_first_frame(
                 lambda w=w, extra=extra: self._schedule_restore(w, extra)
             )
             w.present()
         return True
+
+    def _load_saved_session(self) -> list[dict]:
+        if self._saved_session_windows is None:
+            if not self.settings.restore_session:
+                self._saved_session_windows = []
+            else:
+                from . import session
+
+                self._saved_session_windows = session.load()
+        return self._saved_session_windows
+
+    def _apply_saved_window_mode(self, window: EditorWindow, index: int) -> None:
+        windows = self._load_saved_session()
+        if not 0 <= index < len(windows):
+            return
+        state = windows[index]
+        if bool(state.get("maximized", False)):
+            window.maximize()
+        if bool(state.get("fullscreen", False)):
+            window.fullscreen()
 
     def _schedule_restore(self, window: EditorWindow, state: dict) -> None:
         # The active file is opened first; later files are interleaved with

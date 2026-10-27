@@ -2834,6 +2834,8 @@ class EditorWindow(Gtk.ApplicationWindow):
             "active": self._notebooks[0].get_current_page(),
             "group_pages": [nb.get_current_page() for nb in self._notebooks],
             "active_group": self._notebooks.index(self._active_nb),
+            "maximized": self.is_maximized(),
+            "fullscreen": self.is_fullscreen(),
         }
 
     def _remember_session(self) -> None:

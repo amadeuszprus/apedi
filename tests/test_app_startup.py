@@ -6,6 +6,42 @@ from types import SimpleNamespace
 from apedi import app, backups, recovery
 
 
+def test_saved_window_mode_is_applied_before_present() -> None:
+    class Window:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def maximize(self) -> None:
+            self.calls.append("maximize")
+
+        def fullscreen(self) -> None:
+            self.calls.append("fullscreen")
+
+    application = SimpleNamespace(
+        _load_saved_session=lambda: [{
+            "maximized": True,
+            "fullscreen": True,
+        }],
+    )
+    window = Window()
+
+    app.EditorApp._apply_saved_window_mode(application, window, 0)
+
+    assert window.calls == ["maximize", "fullscreen"]
+
+
+def test_old_session_without_window_mode_keeps_default_window() -> None:
+    window = SimpleNamespace(maximize=lambda: None, fullscreen=lambda: None)
+    application = SimpleNamespace(_load_saved_session=lambda: [{"tabs": []}])
+    calls = []
+    window.maximize = lambda: calls.append("maximize")
+    window.fullscreen = lambda: calls.append("fullscreen")
+
+    app.EditorApp._apply_saved_window_mode(application, window, 0)
+
+    assert calls == []
+
+
 def test_draft_for_session_file_is_not_opened_as_modified_duplicate(
     tmp_path: Path, monkeypatch,
 ) -> None:

@@ -17,7 +17,7 @@ SESSION_PATH = CACHE_DIR / "session.json"
 
 
 def save(windows: list[dict]) -> None:
-    """Persist a list of window states. Each window: {tabs: [...], active: int}."""
+    """Persist tab layout and presentation state for every open window."""
     try:
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
         SESSION_PATH.write_text(
