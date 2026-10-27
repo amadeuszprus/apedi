@@ -38,6 +38,39 @@ def load() -> list[dict]:
     return windows if isinstance(windows, list) else []
 
 
+def ordered_tabs(state: dict) -> list[dict]:
+    """Return restorable tabs with the active one first.
+
+    Session files store tabs in their visual order, grouped left-to-right.
+    Startup wants the selected tab first so useful content appears quickly;
+    callers can restore the original order after all tabs have been opened.
+    """
+    raw_tabs = state.get("tabs", [])
+    if not isinstance(raw_tabs, list):
+        return []
+    tabs = [tab for tab in raw_tabs if isinstance(tab, dict)]
+    if not tabs:
+        return []
+
+    active_group = state.get("active_group", 0)
+    if not isinstance(active_group, int) or active_group not in (0, 1):
+        active_group = 0
+    pages = state.get("group_pages")
+    if not isinstance(pages, list):
+        pages = [state.get("active", 0)]
+    active_page = pages[active_group] if active_group < len(pages) else 0
+    if not isinstance(active_page, int):
+        active_page = 0
+
+    in_active_group = [tab for tab in tabs if tab.get("group", 0) == active_group]
+    active = (
+        in_active_group[active_page]
+        if 0 <= active_page < len(in_active_group)
+        else (in_active_group[0] if in_active_group else tabs[0])
+    )
+    return [active, *(tab for tab in tabs if tab is not active)]
+
+
 def clear() -> None:
     try:
         SESSION_PATH.unlink(missing_ok=True)

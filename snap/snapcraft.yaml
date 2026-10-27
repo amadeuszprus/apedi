@@ -29,6 +29,7 @@ license: MIT
 base: core24
 confinement: strict
 grade: stable
+compression: lzo
 version: '0.7.25'
 icon: data/apedi-icon-512.png
 contact: aprus@codesty.pl

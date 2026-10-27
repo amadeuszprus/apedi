@@ -22,12 +22,14 @@ import builtins
 import importlib.util as _importlib_util
 import logging
 import re
+from dataclasses import dataclass
+from enum import Enum
 from html import escape as _html_escape
 from html.parser import HTMLParser
 from pathlib import Path
-from dataclasses import dataclass
-from enum import Enum
 from typing import Callable
+
+from .markdown_paths import MD_EXTENSIONS, is_markdown_path
 
 if not hasattr(builtins, "_"):
     builtins._ = lambda s: s  # type: ignore[attr-defined]
@@ -146,17 +148,9 @@ def _ensure_md() -> bool:
 
 AVAILABLE = GTK_AVAILABLE and MARKDOWN_AVAILABLE
 
-MD_EXTENSIONS = {".md", ".markdown", ".mdown", ".mkd", ".mkdn"}
-
 DEBOUNCE_MS = 250
 _MIN_CONTENT_MARGIN = 28
 _MAX_CONTENT_WIDTH = 720
-
-
-def is_markdown_path(path: Path | None) -> bool:
-    if path is None:
-        return False
-    return path.suffix.lower() in MD_EXTENSIONS
 
 
 def _content_margin(viewport_width: int) -> int:

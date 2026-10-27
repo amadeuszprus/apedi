@@ -17,8 +17,9 @@ from . import APP_ID, __version__, i18n, recent
 from .settings import Settings
 from .shortcuts import SHORTCUTS
 
+_INITIAL_SETTINGS = Settings.load()
 i18n.configure_locale()
-i18n.install(Settings.load().language)
+i18n.install(_INITIAL_SETTINGS.language)
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class EditorApp(Gtk.Application):
             application_id=APP_ID,
             flags=Gio.ApplicationFlags.HANDLES_OPEN | Gio.ApplicationFlags.HANDLES_COMMAND_LINE,
         )
-        self.settings = Settings.load()
+        self.settings = _INITIAL_SETTINGS
         self._session_windows: list[dict] = []
         self._session_restored = False
         self.add_main_option(
@@ -70,14 +71,19 @@ class EditorApp(Gtk.Application):
         self.add_action(support)
 
         self.recent_menu = Gio.Menu()
-        self._rebuild_recent_menu()
+        # Build the menu from the small JSON file now, but leave filesystem
+        # existence checks until after the first frame.  Stale entries are
+        # harmless for the few milliseconds before validation.
+        self._rebuild_recent_menu(check_existing=False)
 
         for action_name, accels in SHORTCUTS:
             self.set_accels_for_action(action_name, accels)
 
-    def _rebuild_recent_menu(self) -> None:
+    def _rebuild_recent_menu(self, *, check_existing: bool = True) -> None:
         self.recent_menu.remove_all()
-        paths = recent.filter_existing(recent.load())
+        paths = recent.load()
+        if check_existing:
+            paths = recent.filter_existing(paths)
         if not paths:
             self.recent_menu.append_item(Gio.MenuItem.new("(empty)", None))
             return
@@ -127,31 +133,59 @@ class EditorApp(Gtk.Application):
         cwd = Path(command_line.get_cwd() or ".")
         paths = [self._resolve(cwd, f) for f in files]
 
-        if force_new or not self.get_active_window():
+        created = force_new or not self.get_active_window()
+        if created:
             window = self.new_window()
         else:
             window = self.get_active_window()
 
-        if paths:
-            for p in paths:
-                window.open_path(p)
+        if created:
+            window.after_first_frame(
+                lambda: self._populate_initial_window(window, paths)
+            )
+            window.present()
         else:
-            self._maybe_restore_session(window)
-            if window.notebook.get_n_pages() == 0:
-                window.add_tab()
+            self._populate_initial_window(window, paths)
+            window.present()
 
-        window.present()
-        GLib.idle_add(self._maybe_show_whats_new, window)
         return 0
 
     def do_activate(self) -> None:
-        win = self.get_active_window() or self.new_window()
-        self._maybe_restore_session(win)
-        if win.notebook.get_n_pages() == 0:
-            win.add_tab()
+        win = self.get_active_window()
+        if win is None:
+            win = self.new_window()
+            win.after_first_frame(lambda: self._populate_initial_window(win, []))
+        else:
+            self._populate_initial_window(win, [])
         win.present()
-        GLib.idle_add(self._maybe_show_whats_new, win)
-        GLib.idle_add(self._maybe_restore_drafts, win)
+
+    def _populate_initial_window(self, window: EditorWindow, paths: list[Path]) -> bool:
+        """Add useful content only after a newly-created window has painted."""
+        if paths:
+            window.open_path(paths[0])
+            for path in paths[1:]:
+                GLib.idle_add(
+                    self._open_path_once, window, path,
+                    priority=GLib.PRIORITY_LOW,
+                )
+        elif not self._maybe_restore_session(window) and not window.all_tabs():
+            window.add_tab()
+        window.schedule_deferred_init()
+        GLib.timeout_add(500, self._maybe_show_whats_new, window)
+        GLib.timeout_add(750, self._maybe_restore_drafts, window)
+        if not getattr(self, "_recent_validated", False):
+            self._recent_validated = True
+            GLib.timeout_add(250, self._validate_recent_after_startup)
+        return False
+
+    @staticmethod
+    def _open_path_once(window: EditorWindow, path: Path) -> bool:
+        window.open_path(path)
+        return False
+
+    def _validate_recent_after_startup(self) -> bool:
+        self._rebuild_recent_menu()
+        return False
 
     def remember_window(self, state: dict) -> None:
         """Called by a window as it closes; persists the running session."""
@@ -161,50 +195,121 @@ class EditorApp(Gtk.Application):
         if self.settings.restore_session:
             session.save(self._session_windows)
 
-    def _maybe_restore_session(self, window: EditorWindow) -> None:
+    def _maybe_restore_session(self, window: EditorWindow) -> bool:
         if self._session_restored:
-            return
+            return False
         self._session_restored = True
         if not self.settings.restore_session:
-            return
+            return False
         from . import session
 
         windows = session.load()
         if not windows:
-            return
+            return False
         # First saved window fills the already-created one; the rest spawn.
         self._schedule_restore(window, windows[0])
         for extra in windows[1:]:
             w = self.new_window()
-            self._schedule_restore(w, extra)
+            w.after_first_frame(
+                lambda w=w, extra=extra: self._schedule_restore(w, extra)
+            )
             w.present()
+        return True
 
     def _schedule_restore(self, window: EditorWindow, state: dict) -> None:
-        # Defer to PRIORITY_LOW so the window's own deferred init (which loads
-        # the project sidebar) runs first — otherwise opening a file would
-        # re-derive its project root before the saved projects are back.
+        # The active file is opened first; later files are interleaved with
+        # GTK redraws at low priority.
         GLib.idle_add(
             self._restore_window, window, state, priority=GLib.PRIORITY_LOW
         )
 
     def _restore_window(self, window: EditorWindow, state: dict) -> bool:
+        from . import session
+
+        job = {
+            "pending": session.ordered_tabs(state),
+            "restored": [],
+            "active_tab": None,
+        }
+        if not job["pending"]:
+            window.add_tab()
+            return False
+        GLib.idle_add(
+            self._restore_next_tab, window, state, job,
+            priority=GLib.PRIORITY_LOW,
+        )
+        return False
+
+    def _restore_next_tab(self, window: EditorWindow, state: dict, job: dict) -> bool:
         try:
-            for tabinfo in state.get("tabs", []):
-                path = Path(tabinfo.get("path", ""))
-                if not path.is_file():
-                    continue
+            pending = job["pending"]
+            if not pending:
+                self._finish_restore(window, state, job)
+                return False
+
+            tabinfo = pending.pop(0)
+            path = Path(tabinfo.get("path", ""))
+            if path.is_file():
                 group = tabinfo.get("group", 0)
-                window.use_group(group if isinstance(group, int) and group in (0, 1) else 0)
-                if not window.open_path(path, here=True):
+                group = group if isinstance(group, int) and group in (0, 1) else 0
+                window.use_group(group)
+                activate = job["active_tab"] is None
+                if window.open_path(
+                    path, here=True, add_to_recent=False, activate=activate,
+                    auto_preview=False, initialize_extras=False,
+                ):
+                    tab = next(
+                        (candidate for candidate in window._tabs_in(window.notebook)
+                         if candidate.buffer.path == path),
+                        None,
+                    )
+                    if tab is not None:
+                        job["restored"].append((tabinfo, tab))
+                        if job["active_tab"] is None:
+                            job["active_tab"] = tab
+                        cursor = tabinfo.get("cursor")
+                        if isinstance(cursor, int):
+                            buf = tab.buffer
+                            n = buf.get_char_count()
+                            it = buf.get_iter_at_offset(max(0, min(cursor, n)))
+                            buf.place_cursor(it)
+                if job["active_tab"] is not None:
+                    window._focus_tab(job["active_tab"])
+
+            if pending:
+                GLib.idle_add(
+                    self._restore_next_tab, window, state, job,
+                    priority=GLib.PRIORITY_LOW,
+                )
+            else:
+                self._finish_restore(window, state, job)
+        except Exception:
+            log.exception("session restore failed")
+        return False
+
+    def _finish_restore(self, window: EditorWindow, state: dict, job: dict) -> None:
+        if not job["restored"]:
+            window.add_tab()
+            return
+        # Active-first loading changes append order; put every group back in
+        # the exact visual order stored in the session.
+        raw_tabs = state.get("tabs", [])
+        original = [tab for tab in raw_tabs if isinstance(tab, dict)] if isinstance(raw_tabs, list) else []
+        per_group: dict[int, list[tuple[int, object]]] = {0: [], 1: []}
+        for tabinfo, tab in job["restored"]:
+            group = tabinfo.get("group", 0)
+            group = group if group in (0, 1) else 0
+            group_order = [item for item in original if item.get("group", 0) == group]
+            per_group[group].append((group_order.index(tabinfo), tab))
+        window._adding_tab = True
+        try:
+            for group, entries in per_group.items():
+                if group >= len(window._notebooks):
                     continue
-                cursor = tabinfo.get("cursor")
-                tab = window.current_tab()
-                if tab is not None and isinstance(cursor, int):
-                    buf = tab.buffer
-                    n = buf.get_char_count()
-                    it = buf.get_iter_at_offset(max(0, min(cursor, n)))
-                    buf.place_cursor(it)
-                    GLib.idle_add(self._scroll_to_cursor, tab)
+                notebook = window._notebooks[group]
+                for position, tab in sorted(entries):
+                    notebook.reorder_child(tab, position)
+
             window.tidy_groups()
             pages = state.get("group_pages") or [state.get("active", 0)]
             for group, page in enumerate(pages):
@@ -212,9 +317,13 @@ class EditorApp(Gtk.Application):
                     window.select_page(group, page)
             active_group = state.get("active_group", 0)
             window.use_group(active_group if active_group in (0, 1) else 0)
-        except Exception:
-            log.exception("session restore failed")
-        return False
+        finally:
+            window._adding_tab = False
+        tab = window.current_tab()
+        if tab is not None:
+            window._maybe_auto_preview(tab)
+            window.after_first_frame(tab.init_deferred_widgets)
+            GLib.idle_add(self._scroll_to_cursor, tab)
 
     @staticmethod
     def _scroll_to_cursor(tab) -> bool:

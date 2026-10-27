@@ -21,6 +21,7 @@ from gi.repository import Gdk, Gio, GLib, GObject, Gtk, GtkSource  # noqa: E402
 from . import APP_ID, browser, edit_commands, file_io, gitstate, recent, theming
 from .buffer import EditorBuffer
 from .git_gutter import GUTTER_POSITION, ChangeGutterRenderer, GitTracker
+from .markdown_paths import is_markdown_path
 from .settings import Settings, clamp_split_ratio
 
 log = logging.getLogger(__name__)
@@ -80,16 +81,14 @@ class EditorTab(Gtk.Paned):
         self._editor_scroll.set_hexpand(True)
         self._editor_scroll.set_vexpand(True)
         self._editor_scroll.set_child(self.view)
-        # Minimap sits to the right of the source view inside the paned's
-        # start child; visibility is driven by settings.show_minimap.
-        self._minimap = GtkSource.Map()
-        self._minimap.set_view(self.view)
-        self._minimap.set_vexpand(True)
+        # GtkSource.Map is comparatively expensive.  Keep the editor usable
+        # first and create the map from a later idle only when it is enabled.
+        self._minimap: GtkSource.Map | None = None
+        self._deferred_widgets_ready = False
         self._show_minimap = settings.show_minimap
-        editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        editor_box.append(self._editor_scroll)
-        editor_box.append(self._minimap)
-        self.set_start_child(editor_box)
+        self._editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        self._editor_box.append(self._editor_scroll)
+        self.set_start_child(self._editor_box)
         self.set_resize_start_child(True)
         self.set_shrink_start_child(False)
         self.set_resize_end_child(True)
@@ -112,6 +111,20 @@ class EditorTab(Gtk.Paned):
         self.on_external_change: Callable[[Path], None] | None = None
         self.connect_buffer("notify::path-str", lambda *_: self._rewire_monitor())
         self._rewire_monitor()
+
+    def init_deferred_widgets(self) -> bool:
+        self._deferred_widgets_ready = True
+        if self._show_minimap and not self.preview_visible:
+            self._ensure_minimap().set_visible(True)
+        return False
+
+    def _ensure_minimap(self) -> GtkSource.Map:
+        if self._minimap is None:
+            self._minimap = GtkSource.Map()
+            self._minimap.set_view(self.view)
+            self._minimap.set_vexpand(True)
+            self._editor_box.append(self._minimap)
+        return self._minimap
 
     def connect_buffer(self, signal: str, callback: Callable[..., object]) -> None:
         """Connect to the buffer and remember it, so release() can detach this view."""
@@ -256,11 +269,13 @@ class EditorTab(Gtk.Paned):
         )
         self.view.set_monospace(True)
         self._show_minimap = s.show_minimap
-        if hasattr(self, "_minimap"):
+        if self._minimap is not None:
             # In a Markdown split the map consumes a disproportionate amount
             # of the already narrow source pane and makes wrapped prose nearly
             # unreadable. The preference still applies in normal editor mode.
             self._minimap.set_visible(self._show_minimap and not self.preview_visible)
+        elif self._deferred_widgets_ready and self._show_minimap and not self.preview_visible:
+            self._ensure_minimap().set_visible(True)
         css = Gtk.CssProvider()
         css.load_from_string(
             f"textview {{ font-family: '{s.font}'; font-size: {s.font_size}pt; }}"
@@ -410,7 +425,8 @@ class EditorTab(Gtk.Paned):
                 return False
             preview.set_visible(True)
             self.preview_visible = True
-            self._minimap.set_visible(False)
+            if self._minimap is not None:
+                self._minimap.set_visible(False)
             text = self.buffer.get_full_text()
             base = self.buffer.path.parent if self.buffer.path else None
             preview.update(text, base)
@@ -420,7 +436,10 @@ class EditorTab(Gtk.Paned):
         if self.preview is not None:
             self.preview.set_visible(False)
         self.preview_visible = False
-        self._minimap.set_visible(self._show_minimap)
+        if self._minimap is not None:
+            self._minimap.set_visible(self._show_minimap)
+        elif self._deferred_widgets_ready and self._show_minimap:
+            self._ensure_minimap().set_visible(True)
         return True
 
     def bump_preview(self) -> None:
@@ -439,6 +458,7 @@ class EditorWindow(Gtk.ApplicationWindow):
         self.settings = settings
         self._deferred_init_done = False
         self._projects_restored = False
+        self._adding_tab = False
         self.set_title("Apedi")
         self._git = GitTracker()
         self._git.on_repo_changed = self._on_repo_changed
@@ -446,6 +466,22 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._setup_actions()
         self._setup_drop_target()
         self.connect("close-request", self._on_close_request)
+
+    def after_first_frame(self, callback: Callable[[], object]) -> None:
+        """Run callback from an idle after this window completes one frame."""
+        def on_tick(_widget: Gtk.Widget, _clock: Gdk.FrameClock) -> bool:
+            def run() -> bool:
+                callback()
+                return False
+
+            GLib.idle_add(run, priority=GLib.PRIORITY_DEFAULT_IDLE)
+            return False
+
+        self.add_tick_callback(on_tick)
+
+    def schedule_deferred_init(self) -> None:
+        """Leave non-visible project/terminal work outside the first frames."""
+        GLib.timeout_add(100, self._init_deferred)
 
     # ---------- UI construction ----------
 
@@ -656,8 +692,6 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._split_save_timer_id: int | None = None
         self.connect("notify::is-active", self._on_active_changed)
 
-        GLib.idle_add(self._init_deferred, priority=GLib.PRIORITY_LOW)
-
     def _init_deferred(self) -> bool:
         """Phase 2: heavy I/O and Vte startup, after first frame is on screen.
         Idempotent — also force-called sync by terminal actions if user
@@ -666,14 +700,10 @@ class EditorWindow(Gtk.ApplicationWindow):
             return False
         self._deferred_init_done = True
         try:
-            self.terminal_panel = self._build_terminal_panel()
-            if self.terminal_panel is not None:
-                self.terminal_panel.attach_to_window(self)
-                self.terminal_panel.on_open_location = self._open_terminal_location
-                self.terminal_panel.on_empty = self._terminal_emptied
-                self.vpaned.set_end_child(self.terminal_panel)
-                self._apply_terminal_visibility()
             self._ensure_projects_restored()
+            if self.settings.show_terminal:
+                self._ensure_terminal_panel()
+                self._apply_terminal_visibility()
             self._warn_about_stranded_override()
         except Exception:
             log.exception("deferred window init failed")
@@ -698,6 +728,17 @@ class EditorWindow(Gtk.ApplicationWindow):
             log.warning("terminal disabled — Vte unavailable: %s", e)
             return None
         return TerminalPanel()
+
+    def _ensure_terminal_panel(self) -> "Gtk.Widget | None":
+        if self.terminal_panel is not None:
+            return self.terminal_panel
+        self.terminal_panel = self._build_terminal_panel()
+        if self.terminal_panel is not None:
+            self.terminal_panel.attach_to_window(self)
+            self.terminal_panel.on_open_location = self._open_terminal_location
+            self.terminal_panel.on_empty = self._terminal_emptied
+            self.vpaned.set_end_child(self.terminal_panel)
+        return self.terminal_panel
 
     def _open_terminal_location(self, text: str, bases: list[Path]) -> bool:
         """Ctrl+click on `file:line` in the terminal opens that spot in the editor."""
@@ -1092,7 +1133,10 @@ class EditorWindow(Gtk.ApplicationWindow):
         if tab is not None:
             tab.view.grab_focus()
 
-    def add_tab(self, buffer: EditorBuffer | None = None) -> EditorTab:
+    def add_tab(
+        self, buffer: EditorBuffer | None = None, *, activate: bool = True,
+        auto_preview: bool = True, initialize_extras: bool = True,
+    ) -> EditorTab:
         if buffer is None:
             buffer = EditorBuffer()
         tab = EditorTab(buffer, self.settings)
@@ -1100,8 +1144,13 @@ class EditorWindow(Gtk.ApplicationWindow):
         focus = Gtk.EventControllerFocus()
         focus.connect("enter", lambda *_: self._set_active_notebook(self._notebook_of(tab)))
         tab.add_controller(focus)
-        idx = self.notebook.append_page(tab, tab.label_box)
-        self.notebook.set_current_page(idx)
+        self._adding_tab = True
+        try:
+            idx = self.notebook.append_page(tab, tab.label_box)
+        finally:
+            self._adding_tab = False
+        if activate:
+            self.notebook.set_current_page(idx)
         tab.connect_buffer("modified-changed", lambda *_: self._update_status())
         tab.connect_buffer("notify::language", lambda *_: self._update_status())
         tab.connect_buffer("notify::cursor-position", lambda *_: self._update_status())
@@ -1115,9 +1164,13 @@ class EditorWindow(Gtk.ApplicationWindow):
         tab.on_external_change = self._on_buffer_external_change
         tab.on_open_path = self.open_path
         tab.on_split_ratio_changed = self._on_split_ratio_changed
-        tab.view.grab_focus()
-        self._maybe_auto_preview(tab)
+        if activate:
+            tab.view.grab_focus()
+            if auto_preview:
+                self._maybe_auto_preview(tab)
         self._refresh_git_tab(tab)
+        if activate and initialize_extras:
+            self.after_first_frame(tab.init_deferred_widgets)
         return tab
 
     # ---------- git decorations ----------
@@ -1211,7 +1264,9 @@ class EditorWindow(Gtk.ApplicationWindow):
         return box
 
     def open_path(
-        self, path: Path, *, allow_binary: bool = False, allow_large: bool = False, here: bool = False,
+        self, path: Path, *, allow_binary: bool = False, allow_large: bool = False,
+        here: bool = False, add_to_recent: bool = True, activate: bool = True,
+        auto_preview: bool = True, initialize_extras: bool = True,
     ) -> bool:
         """Open `path`, or switch to it if open; `here` adds a view in the active group instead."""
         open_tabs = [t for t in self.all_tabs() if t.buffer.path and t.buffer.path.resolve() == path.resolve()]
@@ -1220,7 +1275,10 @@ class EditorWindow(Gtk.ApplicationWindow):
             if local or not here:
                 self._focus_tab((local or open_tabs)[0])
             else:
-                self.add_tab(open_tabs[0].buffer)
+                self.add_tab(
+                    open_tabs[0].buffer, activate=activate,
+                    auto_preview=auto_preview, initialize_extras=initialize_extras,
+                )
             return True
 
         try:
@@ -1242,21 +1300,32 @@ class EditorWindow(Gtk.ApplicationWindow):
             buffer = EditorBuffer()
             buffer.path = path
             buffer.detect_language()
-            self.add_tab(buffer)
+            self.add_tab(
+                buffer, activate=activate, auto_preview=auto_preview,
+                initialize_extras=initialize_extras,
+            )
             self._set_status(f"New file: {path.name}")
             return True
         except file_io.FileTooLargeError as e:
             self._confirm_async(
                 "Open large file?",
                 f"{e.path.name} is {e.size // (1024 * 1024)} MB. Open anyway?",
-                lambda yes: self.open_path(path, allow_binary=allow_binary, allow_large=True) if yes else None,
+                lambda yes: self.open_path(
+                    path, allow_binary=allow_binary, allow_large=True,
+                    here=here, add_to_recent=add_to_recent, activate=activate,
+                    auto_preview=auto_preview, initialize_extras=initialize_extras,
+                ) if yes else None,
             )
             return False
         except file_io.BinaryFileError:
             self._confirm_async(
                 "Open binary file?",
                 f"{path.name} appears to be binary. Open as text?",
-                lambda yes: self.open_path(path, allow_binary=True, allow_large=allow_large) if yes else None,
+                lambda yes: self.open_path(
+                    path, allow_binary=True, allow_large=allow_large,
+                    here=here, add_to_recent=add_to_recent, activate=activate,
+                    auto_preview=auto_preview, initialize_extras=initialize_extras,
+                ) if yes else None,
             )
             return False
         except (OSError, PermissionError) as e:
@@ -1270,10 +1339,14 @@ class EditorWindow(Gtk.ApplicationWindow):
         else:
             buffer = EditorBuffer()
             buffer.load(loaded.text, path, loaded.encoding, loaded.mtime)
-            self.add_tab(buffer)
+            self.add_tab(
+                buffer, activate=activate, auto_preview=auto_preview,
+                initialize_extras=initialize_extras,
+            )
 
-        recent.save(recent.add(path))
-        self.get_application().notify_recent_changed()
+        if add_to_recent:
+            recent.save(recent.add(path))
+            self.get_application().notify_recent_changed()
         self._set_status(f"Opened {path.name} ({loaded.encoding})")
         self._maybe_switch_project(path)
         return True
@@ -1325,7 +1398,12 @@ class EditorWindow(Gtk.ApplicationWindow):
     def action_new_window(self, *_args: object) -> None:
         app = self.get_application()
         win = app.new_window()  # type: ignore[attr-defined]
-        win.add_tab()
+
+        def populate() -> None:
+            win.add_tab()
+            win.schedule_deferred_init()
+
+        win.after_first_frame(populate)
         win.present()
 
     def action_open(self, *_args: object) -> None:
@@ -1821,7 +1899,7 @@ class EditorWindow(Gtk.ApplicationWindow):
 
     def action_toggle_terminal(self, *_args: object) -> None:
         self._init_deferred()
-        if self.terminal_panel is None:
+        if self._ensure_terminal_panel() is None:
             self._set_status("Terminal unavailable in this build")
             return
         self.settings.show_terminal = not self.settings.show_terminal
@@ -1834,7 +1912,7 @@ class EditorWindow(Gtk.ApplicationWindow):
 
     def action_new_terminal(self, *_args: object) -> None:
         self._init_deferred()
-        if self.terminal_panel is None:
+        if self._ensure_terminal_panel() is None:
             self._set_status("Terminal unavailable in this build")
             return
         if not self.settings.show_terminal:
@@ -1878,7 +1956,7 @@ class EditorWindow(Gtk.ApplicationWindow):
 
     def _run_task(self, task) -> None:
         self._init_deferred()
-        if self.terminal_panel is None:
+        if self._ensure_terminal_panel() is None:
             self._set_status(_("Terminal unavailable in this build"))
             return
         self._last_task = task
@@ -1901,9 +1979,8 @@ class EditorWindow(Gtk.ApplicationWindow):
         tab.set_preview_visible(not tab.preview_visible)
 
     def _is_markdown_tab(self, tab: "EditorTab") -> bool:
-        from .markdown_preview import is_markdown_path
-
-        if is_markdown_path(tab.buffer.path):
+        path = tab.buffer.path
+        if is_markdown_path(path):
             return True
         lang = tab.buffer.get_language()
         return lang is not None and lang.get_id() in {"markdown", "apedi-markdown"}
@@ -1993,12 +2070,13 @@ class EditorWindow(Gtk.ApplicationWindow):
             return
         if tab.preview_visible:
             return
+        if not self._is_markdown_tab(tab):
+            return
         from .markdown_preview import AVAILABLE
 
         if not AVAILABLE:
             return
-        if self._is_markdown_tab(tab):
-            tab.set_preview_visible(True)
+        tab.set_preview_visible(True)
 
     # ---------- Sidebar context actions ----------
 
@@ -2701,8 +2779,11 @@ class EditorWindow(Gtk.ApplicationWindow):
         self._set_active_notebook(nb)
         GLib.idle_add(self._update_status)
         self._schedule_outline(0)
-        if isinstance(page, EditorTab) and page.buffer.path:
-            self.sidebar.reveal_file(page.buffer.path)
+        if isinstance(page, EditorTab) and not self._adding_tab:
+            GLib.idle_add(page.init_deferred_widgets, priority=GLib.PRIORITY_LOW)
+            if page.buffer.path:
+                self.sidebar.reveal_file(page.buffer.path)
+                self._maybe_auto_preview(page)
 
     # ---------- Close request / dirty guard ----------
 
