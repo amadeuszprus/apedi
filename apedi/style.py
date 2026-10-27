@@ -55,37 +55,104 @@ aboutdialog button.link:hover,
 aboutdialog button.link:active,
 aboutdialog button.link:focus { text-decoration: none; }
 
+/* Markdown preview - long-form reading rhythm */
+.apedi-md-prose {
+    font-size: 1.02em;
+    margin: 4px 0 8px;
+}
+.apedi-md-heading-1,
+.apedi-md-heading-2,
+.apedi-md-heading-3,
+.apedi-md-heading-4,
+.apedi-md-heading-5,
+.apedi-md-heading-6 {
+    margin-top: 18px;
+    margin-bottom: 8px;
+}
+.apedi-md-heading-1 {
+    padding-bottom: 9px;
+    border-bottom: 1px solid alpha(currentColor, 0.18);
+}
+.apedi-md-heading-2 {
+    padding-bottom: 7px;
+    border-bottom: 1px solid alpha(currentColor, 0.11);
+}
+.apedi-md-heading-3 { margin-top: 14px; }
+.apedi-md-list {
+    margin-top: 3px;
+    margin-bottom: 10px;
+}
+.apedi-md-quote {
+    color: alpha(currentColor, 0.82);
+    background: alpha(currentColor, 0.045);
+    border-left: 3px solid alpha(currentColor, 0.30);
+    border-radius: 0 6px 6px 0;
+    padding: 10px 14px;
+    margin: 7px 0 13px;
+}
+separator.apedi-md-break {
+    min-height: 1px;
+    background: alpha(currentColor, 0.16);
+    margin: 18px 0;
+}
+
 /* Markdown preview - tables */
 frame.apedi-md-table {
     border: 1px solid alpha(currentColor, 0.15);
-    border-radius: 6px;
-    margin: 8px 0;
+    border-radius: 8px;
+    margin: 10px 0 14px;
 }
 .apedi-md-table > grid > label {
-    padding: 6px 12px;
+    padding: 8px 12px;
     background: transparent;
 }
 .apedi-md-table > grid > label.header {
     font-weight: bold;
-    background: alpha(currentColor, 0.06);
+    background: alpha(currentColor, 0.065);
     border-bottom: 1px solid alpha(currentColor, 0.15);
 }
 .apedi-md-table > grid > label.odd {
-    background: alpha(currentColor, 0.03);
+    background: alpha(currentColor, 0.028);
+}
+.apedi-md-table > grid > label.column-separator {
+    border-right: 1px solid alpha(currentColor, 0.10);
+}
+.apedi-md-table > grid > label.row-separator {
+    border-bottom: 1px solid alpha(currentColor, 0.08);
 }
 
 /* Markdown preview - code blocks */
 frame.apedi-md-code {
     background: alpha(currentColor, 0.06);
-    border: 1px solid alpha(currentColor, 0.10);
-    border-radius: 6px;
-    margin: 8px 0;
+    border: none;
+    border-radius: 8px;
+    box-shadow:
+        0 0 0 1px alpha(currentColor, 0.10),
+        0 1px 2px alpha(black, 0.06),
+        0 2px 4px alpha(black, 0.035);
+    margin: 10px 1px 14px;
 }
-.apedi-md-code > * {
-    padding: 10px 14px;
+.apedi-md-code-language {
+    font-family: monospace;
+    font-size: 0.78em;
+    color: alpha(currentColor, 0.58);
+    background: alpha(currentColor, 0.035);
+    border-bottom: 1px solid alpha(currentColor, 0.08);
+    padding: 6px 12px 5px;
 }
 .apedi-md-code label {
     font-family: monospace;
+}
+
+/* Markdown preview - images */
+.apedi-md-image {
+    border-radius: 6px;
+    outline: 1px solid rgba(0, 0, 0, 0.10);
+    outline-offset: -1px;
+    margin: 10px 0 14px;
+}
+.apedi-md-preview.apedi-dark .apedi-md-image {
+    outline-color: rgba(255, 255, 255, 0.10);
 }
 """
 

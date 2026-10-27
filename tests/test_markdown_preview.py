@@ -34,6 +34,11 @@ def test_is_markdown_path_no(name: str) -> None:
     assert mp.is_markdown_path(Path(name)) is False
 
 
+def test_content_margin_limits_long_lines_without_squeezing_split_view() -> None:
+    assert mp._content_margin(500) == 24
+    assert mp._content_margin(1024) == 132
+
+
 def test_module_import_does_not_load_markdown() -> None:
     assert isinstance(mp.MARKDOWN_AVAILABLE, bool)
 
@@ -57,8 +62,8 @@ def test_render_blocks_returns_list() -> None:
 @pytestmark_md
 def test_render_heading_present() -> None:
     blocks = mp.render_blocks("# Title\n\n## Sub")
-    assert len(blocks) == 1
-    m = blocks[0].pango_markup
+    assert [block.kind for block in blocks] == [mp.ProseKind.HEADING_1, mp.ProseKind.HEADING_2]
+    m = "\n".join(block.pango_markup for block in blocks)
     assert '<span size="xx-large" weight="bold">' in m
     assert "Title" in m
     assert '<span size="x-large" weight="bold">' in m
@@ -85,6 +90,12 @@ def test_render_inline_bold_and_code() -> None:
     m = mp.render_blocks("This is **bold** and `code`.")[0].pango_markup
     assert "<b>bold</b>" in m
     assert 'font_family="monospace"' in m
+
+
+@pytestmark_md
+def test_whitespace_between_inline_elements_is_preserved() -> None:
+    m = mp.render_blocks("**bold** *italic*")[0].pango_markup
+    assert "</b> <i>" in m
 
 
 @pytestmark_md
@@ -149,15 +160,19 @@ def test_local_image_path_needs_a_base_for_relative_sources() -> None:
 
 @pytestmark_md
 def test_render_hr() -> None:
-    m = mp.render_blocks("hi\n\n---\n\nbye\n")[0].pango_markup
-    assert "─" * 60 in m
+    blocks = mp.render_blocks("hi\n\n---\n\nbye\n")
+    assert [type(block).__name__ for block in blocks] == [
+        "ProseBlock", "ThematicBreakBlock", "ProseBlock",
+    ]
 
 
 @pytestmark_md
 def test_render_blockquote() -> None:
-    m = mp.render_blocks("> quoted\n")[0].pango_markup
-    assert "│ " in m
-    assert "<i>" in m
+    block = mp.render_blocks("> quoted\n")[0]
+    assert block.kind is mp.ProseKind.QUOTE
+    assert "quoted" in block.pango_markup
+    assert "<i>" in block.pango_markup
+    assert not block.pango_markup.endswith("\n</i>")
 
 
 @pytestmark_md
@@ -247,22 +262,25 @@ def test_inline_code_stays_in_prose() -> None:
 
 
 @pytestmark_md
-def test_heading_underline_h1() -> None:
-    m = mp.render_blocks("# Title")[0].pango_markup
-    assert "━" in m
+def test_heading_h1_has_visual_role_without_text_decoration() -> None:
+    block = mp.render_blocks("# Title")[0]
+    assert block.kind is mp.ProseKind.HEADING_1
+    assert "━" not in block.pango_markup
 
 
 @pytestmark_md
-def test_heading_underline_h2() -> None:
-    m = mp.render_blocks("## Sub")[0].pango_markup
-    assert "─" in m
+def test_heading_h2_has_visual_role_without_text_decoration() -> None:
+    block = mp.render_blocks("## Sub")[0]
+    assert block.kind is mp.ProseKind.HEADING_2
+    assert "─" not in block.pango_markup
 
 
 @pytestmark_md
 def test_heading_no_underline_h3() -> None:
-    m = mp.render_blocks("### Small")[0].pango_markup
+    block = mp.render_blocks("### Small")[0]
+    assert block.kind is mp.ProseKind.HEADING_3
+    m = block.pango_markup
     assert "━" not in m
-    # The hr uses '─' × 60 — but h3 alone (no hr) must not have '─'.
     assert "─" not in m
 
 
@@ -294,16 +312,17 @@ def test_bullet_list_unchanged_by_task_extension() -> None:
 
 
 @pytestmark_md
-def test_nested_blockquote_double_bar() -> None:
-    m = mp.render_blocks("> > deep\n")[0].pango_markup
-    assert "│ │ " in m
+def test_nested_blockquote_adds_marker_beyond_css_border() -> None:
+    block = mp.render_blocks("> > deep\n")[0]
+    assert block.kind is mp.ProseKind.QUOTE
+    assert "│ " in block.pango_markup
 
 
 @pytestmark_md
-def test_single_blockquote_still_single_bar() -> None:
-    m = mp.render_blocks("> shallow\n")[0].pango_markup
-    assert "│ " in m
-    assert "│ │ " not in m
+def test_single_blockquote_leaves_bar_to_css() -> None:
+    block = mp.render_blocks("> shallow\n")[0]
+    assert block.kind is mp.ProseKind.QUOTE
+    assert "│ " not in block.pango_markup
 
 
 @pytestmark_md
@@ -324,9 +343,15 @@ def _assert_balanced(markup: str) -> None:
 
 @pytestmark_md
 def test_raw_unclosed_html_tag_stays_balanced() -> None:
-    m = mp.render_blocks("Now has no <h3> (index page).\n\nNext paragraph.")[0].pango_markup
-    _assert_balanced(m)
-    assert m.index("</span>") < m.index("Next paragraph")
+    blocks = mp.render_blocks("Now has no <h3> (index page).\n\nNext paragraph.")
+    for block in blocks:
+        _assert_balanced(block.pango_markup)
+    assert [block.kind for block in blocks] == [
+        mp.ProseKind.PARAGRAPH,
+        mp.ProseKind.HEADING_3,
+        mp.ProseKind.PARAGRAPH,
+    ]
+    assert "Next paragraph" in blocks[-1].pango_markup
 
 
 @pytestmark_md
@@ -343,3 +368,6 @@ def test_style_contains_new_selectors() -> None:
     src = style_path.read_text(encoding="utf-8")
     assert ".apedi-md-table" in src
     assert ".apedi-md-code" in src
+    assert ".apedi-md-quote" in src
+    assert ".apedi-md-heading-1" in src
+    assert ".apedi-md-image" in src

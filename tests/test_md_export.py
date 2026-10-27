@@ -54,7 +54,7 @@ def test_pdf_paginates_and_embeds_images(tmp_path: Path) -> None:
     shutil.copy(ICON, tmp_path / "icon.png")
     paragraphs = "\n\n".join(f"Paragraph {i} with **bold** and a [link](http://x)." for i in range(120))
     text = (
-        f"# Title\n\n![i](icon.png)\n\n{paragraphs}\n\n| k | v |\n|---|---|\n| a | b |\n\n"
+        f"# Title\n\n![i](icon.png)\n\n{paragraphs}\n\n---\n\n| k | v |\n|---|---|\n| a | b |\n\n"
         "```\ncode line\n```\n\n- item\n- [ ] task\n"
     )
     out = tmp_path / "out.pdf"

@@ -133,12 +133,19 @@ AVAILABLE = GTK_AVAILABLE and MARKDOWN_AVAILABLE
 MD_EXTENSIONS = {".md", ".markdown", ".mdown", ".mkd", ".mkdn"}
 
 DEBOUNCE_MS = 250
+_MIN_CONTENT_MARGIN = 24
+_MAX_CONTENT_WIDTH = 760
 
 
 def is_markdown_path(path: Path | None) -> bool:
     if path is None:
         return False
     return path.suffix.lower() in MD_EXTENSIONS
+
+
+def _content_margin(viewport_width: int) -> int:
+    """Horizontal inset for a readable column that still fits narrow splits."""
+    return max(_MIN_CONTENT_MARGIN, (viewport_width - _MAX_CONTENT_WIDTH) // 2)
 
 
 # ---------- Block model ----------
@@ -150,10 +157,26 @@ class Align(Enum):
     RIGHT = "right"
 
 
+class ProseKind(Enum):
+    """Visual role of a prose block in the rendered document."""
+
+    BODY = "body"
+    PARAGRAPH = "paragraph"
+    LIST = "list"
+    QUOTE = "quote"
+    HEADING_1 = "heading-1"
+    HEADING_2 = "heading-2"
+    HEADING_3 = "heading-3"
+    HEADING_4 = "heading-4"
+    HEADING_5 = "heading-5"
+    HEADING_6 = "heading-6"
+
+
 @dataclass(frozen=True)
 class ProseBlock:
     """Headings, paragraphs, lists, blockquotes — rendered as Pango markup."""
     pango_markup: str
+    kind: ProseKind = ProseKind.BODY
 
 
 @dataclass(frozen=True)
@@ -178,7 +201,12 @@ class ImageBlock:
     alt: str
 
 
-Block = ProseBlock | TableBlock | CodeBlock | ImageBlock
+@dataclass(frozen=True)
+class ThematicBreakBlock:
+    """A semantic horizontal rule."""
+
+
+Block = ProseBlock | TableBlock | CodeBlock | ImageBlock | ThematicBreakBlock
 
 
 def local_image_path(src: str, base: Path | None) -> Path | None:
@@ -209,8 +237,6 @@ _HEADING_SPANS = {
     "h6": '<span size="small" weight="bold">',
 }
 
-_HR = "─" * 60
-
 # Tags whose closing markup the builder must emit, so raw HTML cannot unbalance it.
 _PAIRED = {*_HEADING_SPANS, "strong", "b", "em", "i", "code", "pre", "a", "blockquote", "p", "li"}
 
@@ -234,9 +260,6 @@ class _PangoBuilder(HTMLParser):
         # and dark themes — no need to swap colors per theme.
         self._code_bg = "#808080"
         self._code_bg_alpha = "10000"  # ~15% of 65535
-        self._quote_fg = "#999999"
-        self._heading_char_count: int | None = None  # non-None while inside h1/h2
-        self._heading_underline_char: str | None = None
         self._li_pending_task: bool = False
         self._quote_depth: int = 0
         self._open: list[str] = []
@@ -260,12 +283,6 @@ class _PangoBuilder(HTMLParser):
             self._open.append(tag)
         if tag in _HEADING_SPANS:
             self._emit(_HEADING_SPANS[tag])
-            if tag == "h1":
-                self._heading_char_count = 0
-                self._heading_underline_char = "━"
-            elif tag == "h2":
-                self._heading_char_count = 0
-                self._heading_underline_char = "─"
         elif tag in ("strong", "b"):
             self._emit("<b>")
         elif tag in ("em", "i"):
@@ -278,8 +295,6 @@ class _PangoBuilder(HTMLParser):
             self._emit(f'<span background="{self._code_bg}" background_alpha="{self._code_bg_alpha}" font_family="monospace">')
         elif tag == "br":
             self._emit("\n")
-        elif tag == "hr":
-            self._emit(f"\n{_HR}\n")
         elif tag == "a":
             href = attrs_d.get("href", "") or ""
             self._emit(f'<a href="{_html_escape(href, quote=True)}">')
@@ -299,8 +314,10 @@ class _PangoBuilder(HTMLParser):
                 self._li_pending_task = True
         elif tag == "blockquote":
             self._quote_depth += 1
-            prefix = "│ " * self._quote_depth
-            self._emit(f'\n<i><span foreground="{self._quote_fg}">{prefix}')
+            # The outer quote gets a real CSS border. Keep text markers only
+            # for additional nesting so the depth remains visible.
+            prefix = "│ " * max(0, self._quote_depth - 1)
+            self._emit(f"<i>{prefix}")
         elif tag == "img":
             src = attrs_d.get("src", "") or ""
             name = src.rsplit("/", 1)[-1] or src or "image"
@@ -333,11 +350,6 @@ class _PangoBuilder(HTMLParser):
     def _close(self, tag: str) -> None:
         if tag in _HEADING_SPANS:
             self._emit("</span>\n")
-            if tag in ("h1", "h2") and self._heading_char_count is not None:
-                width = self._heading_char_count + 4
-                self._emit(self._heading_underline_char * width + "\n")
-                self._heading_char_count = None
-                self._heading_underline_char = None
             self._emit("\n")
         elif tag in ("strong", "b"):
             self._emit("</b>")
@@ -355,13 +367,23 @@ class _PangoBuilder(HTMLParser):
             if not self.cell_mode:
                 self._emit("\n\n")
         elif tag == "blockquote":
-            self._emit("</span></i>\n")
+            while self.out:
+                trimmed = self.out[-1].rstrip("\n")
+                if trimmed:
+                    self.out[-1] = trimmed
+                    break
+                self.out.pop()
+            self._emit("</i>")
             self._quote_depth = max(0, self._quote_depth - 1)
 
     # ---- text ----
 
     def handle_data(self, data) -> None:
         if not data:
+            return
+        if not self.in_pre and not data.strip() and "\n" in data:
+            # python-markdown pretty-prints block tags on separate lines.
+            # Those structural newlines should not become blank reading lines.
             return
         if self._li_pending_task:
             self._li_pending_task = False
@@ -374,8 +396,6 @@ class _PangoBuilder(HTMLParser):
                     return
             else:
                 self._emit("• ")
-        if self._heading_char_count is not None:
-            self._heading_char_count += len(data)
         if self.in_pre:
             # Preserve whitespace including leading indent
             self._emit(_html_escape(data, quote=False))
@@ -403,11 +423,21 @@ class _BlockSplitter(HTMLParser):
 
     _TABLE_STRUCT = {"thead", "tbody", "tr", "th", "td"}
     _INLINE = {"strong", "b", "em", "i", "a", "code", "del", "s", "span", "sup", "sub", "mark"}
+    _PROSE_KINDS = {
+        "p": ProseKind.PARAGRAPH,
+        "ul": ProseKind.LIST,
+        "ol": ProseKind.LIST,
+        "blockquote": ProseKind.QUOTE,
+        **{f"h{i}": ProseKind(f"heading-{i}") for i in range(1, 7)},
+    }
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.blocks: list[Block] = []
         self._prose = _PangoBuilder(dark=False)
+        self._prose_kind = ProseKind.BODY
+        self._prose_root: str | None = None
+        self._prose_root_depth = 0
         # Open inline tags in prose; an image inside one cannot split the paragraph.
         self._inline_depth = 0
         # Table state
@@ -429,8 +459,11 @@ class _BlockSplitter(HTMLParser):
     def _flush_prose(self) -> None:
         markup = self._prose.result().strip()
         if markup:
-            self.blocks.append(ProseBlock(markup))
+            self.blocks.append(ProseBlock(markup, self._prose_kind))
         self._prose = _PangoBuilder(dark=False)
+        self._prose_kind = ProseKind.BODY
+        self._prose_root = None
+        self._prose_root_depth = 0
 
     @staticmethod
     def _parse_align(style: str) -> Align:
@@ -479,10 +512,30 @@ class _BlockSplitter(HTMLParser):
             if tag == "code":
                 self._code_lang = self._parse_lang(attrs_d.get("class", "") or "")
             return
+        if tag == "hr":
+            self._flush_prose()
+            self.blocks.append(ThematicBreakBlock())
+            return
         if tag == "img" and self._can_split_for_image():
             self._flush_prose()
             self.blocks.append(ImageBlock(src=attrs_d.get("src", "") or "", alt=attrs_d.get("alt", "") or ""))
             return
+        kind = self._PROSE_KINDS.get(tag)
+        if kind is not None:
+            # Markdown normally emits clean top-level blocks. A new paragraph
+            # or heading also closes malformed raw HTML such as a lone <h3>.
+            if self._prose_root is None:
+                self._flush_prose()
+                self._prose_root = tag
+                self._prose_root_depth = 1
+                self._prose_kind = kind
+            elif tag == self._prose_root:
+                self._prose_root_depth += 1
+            elif self._prose_root in {"p", "h1", "h2", "h3", "h4", "h5", "h6"}:
+                self._flush_prose()
+                self._prose_root = tag
+                self._prose_root_depth = 1
+                self._prose_kind = kind
         if tag in self._INLINE:
             self._inline_depth += 1
         # Prose
@@ -511,6 +564,10 @@ class _BlockSplitter(HTMLParser):
         if tag in self._INLINE:
             self._inline_depth = max(0, self._inline_depth - 1)
         self._prose.handle_endtag(tag)
+        if tag == self._prose_root:
+            self._prose_root_depth -= 1
+            if self._prose_root_depth <= 0:
+                self._flush_prose()
 
     def handle_data(self, data) -> None:
         if self._in_table:
@@ -627,6 +684,10 @@ if GTK_AVAILABLE:
                 return self._build_code(block)
             if isinstance(block, ImageBlock):
                 return self._build_image(block)
+            if isinstance(block, ThematicBreakBlock):
+                separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+                separator.add_css_class("apedi-md-break")
+                return separator
             raise TypeError(f"Unknown block type: {type(block).__name__}")
 
         def _texture_for(self, path: Path) -> "Gdk.Texture | None":
@@ -658,8 +719,7 @@ if GTK_AVAILABLE:
             picture.set_can_shrink(True)
             picture.set_content_fit(Gtk.ContentFit.SCALE_DOWN)
             picture.set_halign(Gtk.Align.START)
-            picture.set_margin_top(6)
-            picture.set_margin_bottom(6)
+            picture.add_css_class("apedi-md-image")
             picture.set_alternative_text(block.alt or path.name)
             picture.set_tooltip_text(block.alt or block.src)
             return picture
@@ -674,7 +734,10 @@ if GTK_AVAILABLE:
             label.set_yalign(0.0)
             label.set_valign(Gtk.Align.START)
             label.set_halign(Gtk.Align.FILL)
+            label.add_css_class("apedi-md-prose")
+            label.add_css_class(f"apedi-md-{block.kind.value}")
             label.set_markup(block.pango_markup)
+            label.get_layout().set_line_spacing(1.28)
             label.connect("activate-link", self._on_activate_link)
             return label
 
@@ -693,6 +756,8 @@ if GTK_AVAILABLE:
             for col, cell_markup in enumerate(block.header):
                 lbl = self._cell_label(cell_markup, xalign_for[block.aligns[col]])
                 lbl.add_css_class("header")
+                if col < len(block.header) - 1:
+                    lbl.add_css_class("column-separator")
                 grid.attach(lbl, col, 0, 1, 1)
 
             for row_idx, row in enumerate(block.rows):
@@ -701,6 +766,10 @@ if GTK_AVAILABLE:
                     align = block.aligns[col] if col < len(block.aligns) else Align.LEFT
                     lbl = self._cell_label(cell_markup, xalign_for[align])
                     lbl.add_css_class(zebra)
+                    if col < len(row) - 1:
+                        lbl.add_css_class("column-separator")
+                    if row_idx < len(block.rows) - 1:
+                        lbl.add_css_class("row-separator")
                     grid.attach(lbl, col, row_idx + 1, 1, 1)
 
             frame.set_child(grid)
@@ -723,11 +792,18 @@ if GTK_AVAILABLE:
         def _build_code(self, block: CodeBlock) -> "Gtk.Widget":
             frame = Gtk.Frame()
             frame.add_css_class("apedi-md-code")
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+            if block.lang:
+                language = Gtk.Label(label=block.lang)
+                language.set_xalign(1.0)
+                language.add_css_class("apedi-md-code-language")
+                box.append(language)
             scroller = Gtk.ScrolledWindow()
             scroller.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
             scroller.set_hexpand(True)
             scroller.set_child(self._build_code_child(block))
-            frame.set_child(scroller)
+            box.append(scroller)
+            frame.set_child(box)
             return frame
 
         def _build_code_child(self, block: CodeBlock) -> "Gtk.Widget":
@@ -748,10 +824,12 @@ if GTK_AVAILABLE:
                 view.set_cursor_visible(False)
                 view.set_monospace(True)
                 view.set_show_line_numbers(False)
-                view.set_left_margin(8)
-                view.set_right_margin(8)
-                view.set_top_margin(6)
-                view.set_bottom_margin(6)
+                view.set_left_margin(14)
+                view.set_right_margin(14)
+                view.set_top_margin(12)
+                view.set_bottom_margin(12)
+                view.set_pixels_above_lines(1)
+                view.set_pixels_below_lines(1)
                 view.add_css_class("apedi-md-code-view")
                 return view
             label = Gtk.Label()
@@ -779,7 +857,8 @@ if GTK_AVAILABLE:
             self.set_hexpand(True)
             self.set_vexpand(True)
             self.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-            self._dark: bool = False  # kept for API compatibility; unused
+            self.add_css_class("apedi-md-preview")
+            self._dark: bool = False
             self._pending_text: str = ""
             self._pending_base: Path | None = None
             self._timer_id: int | None = None
@@ -796,10 +875,10 @@ if GTK_AVAILABLE:
             self._box.set_vexpand(False)
             self._box.set_valign(Gtk.Align.START)
             self._box.set_halign(Gtk.Align.FILL)
-            self._box.set_margin_start(20)
-            self._box.set_margin_end(20)
-            self._box.set_margin_top(16)
-            self._box.set_margin_bottom(16)
+            self._box.set_margin_start(_MIN_CONTENT_MARGIN)
+            self._box.set_margin_end(_MIN_CONTENT_MARGIN)
+            self._box.set_margin_top(24)
+            self._box.set_margin_bottom(32)
 
             self._renderer = _BlockRenderer(
                 on_activate_link=self._on_activate_link, dark=self._dark
@@ -829,8 +908,19 @@ if GTK_AVAILABLE:
             changed = is_dark != self._dark
             self._dark = is_dark
             self._renderer.dark = is_dark
+            if is_dark:
+                self.add_css_class("apedi-dark")
+            else:
+                self.remove_css_class("apedi-dark")
             if changed and self._last_rendered_text is not None:
                 self._render_blocks(self._last_rendered_text)
+
+        def do_size_allocate(self, width: int, height: int, baseline: int) -> None:
+            """Keep long-form text comfortable when the preview gets wide."""
+            margin = _content_margin(width)
+            self._box.set_margin_start(margin)
+            self._box.set_margin_end(margin)
+            Gtk.ScrolledWindow.do_size_allocate(self, width, height, baseline)
 
         def update(self, text: str, base_path: Path | None) -> None:
             """Schedule a debounced render of `text`."""

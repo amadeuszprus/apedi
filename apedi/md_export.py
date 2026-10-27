@@ -203,8 +203,30 @@ class _Pdf:
         # Room for a heading and a couple of lines, so a title never ends a page alone.
         self.ensure(48)
         layout = self.layout(_CONTENT_W)
-        _set_markup(layout, _pango_markup(block.pango_markup))
+        markup = _pango_markup(block.pango_markup)
+        if block.kind is mp.ProseKind.QUOTE:
+            markup = f'<span foreground="#59636e">│  {markup}</span>'
+        _set_markup(layout, markup)
         self.flow(layout, _MARGIN)
+        if block.kind in (mp.ProseKind.HEADING_1, mp.ProseKind.HEADING_2):
+            self.ensure(8)
+            self.y += 3
+            self.cr.set_source_rgb(0.84, 0.86, 0.88)
+            self.cr.set_line_width(0.6)
+            self.cr.move_to(_MARGIN, self.y)
+            self.cr.line_to(_MARGIN + _CONTENT_W, self.y)
+            self.cr.stroke()
+            self.y += 5
+
+    def thematic_break(self) -> None:
+        self.ensure(17)
+        self.y += 8
+        self.cr.set_source_rgb(0.84, 0.86, 0.88)
+        self.cr.set_line_width(0.6)
+        self.cr.move_to(_MARGIN, self.y)
+        self.cr.line_to(_MARGIN + _CONTENT_W, self.y)
+        self.cr.stroke()
+        self.y += 9
 
     def code(self, block: mp.CodeBlock) -> None:
         layout = self.layout(_CONTENT_W - 2 * _CODE_PAD, mono=True)
@@ -309,5 +331,7 @@ def to_pdf(text: str, base: Path | None, out: Path) -> None:
                 pdf.table(block)
             elif isinstance(block, mp.ImageBlock):
                 pdf.image(block, base)
+            elif isinstance(block, mp.ThematicBreakBlock):
+                pdf.thematic_break()
     finally:
         pdf.finish()
