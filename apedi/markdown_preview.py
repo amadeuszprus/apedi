@@ -133,8 +133,8 @@ AVAILABLE = GTK_AVAILABLE and MARKDOWN_AVAILABLE
 MD_EXTENSIONS = {".md", ".markdown", ".mdown", ".mkd", ".mkdn"}
 
 DEBOUNCE_MS = 250
-_MIN_CONTENT_MARGIN = 24
-_MAX_CONTENT_WIDTH = 760
+_MIN_CONTENT_MARGIN = 28
+_MAX_CONTENT_WIDTH = 720
 
 
 def is_markdown_path(path: Path | None) -> bool:
@@ -737,7 +737,7 @@ if GTK_AVAILABLE:
             label.add_css_class("apedi-md-prose")
             label.add_css_class(f"apedi-md-{block.kind.value}")
             label.set_markup(block.pango_markup)
-            label.get_layout().set_line_spacing(1.28)
+            label.get_layout().set_line_spacing(1.42)
             label.connect("activate-link", self._on_activate_link)
             return label
 
@@ -877,8 +877,8 @@ if GTK_AVAILABLE:
             self._box.set_halign(Gtk.Align.FILL)
             self._box.set_margin_start(_MIN_CONTENT_MARGIN)
             self._box.set_margin_end(_MIN_CONTENT_MARGIN)
-            self._box.set_margin_top(24)
-            self._box.set_margin_bottom(32)
+            self._box.set_margin_top(30)
+            self._box.set_margin_bottom(48)
 
             self._renderer = _BlockRenderer(
                 on_activate_link=self._on_activate_link, dark=self._dark
@@ -897,6 +897,7 @@ if GTK_AVAILABLE:
             # source pane. Reading the preview does not need focus tracking.
             viewport = self.get_child()
             if isinstance(viewport, Gtk.Viewport):
+                viewport.add_css_class("apedi-md-viewport")
                 viewport.set_scroll_to_focus(False)
                 # Size the content by natural height; shrinkable images have a near-zero minimum.
                 viewport.set_vscroll_policy(Gtk.ScrollablePolicy.NATURAL)

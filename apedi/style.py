@@ -56,9 +56,14 @@ aboutdialog button.link:active,
 aboutdialog button.link:focus { text-decoration: none; }
 
 /* Markdown preview - long-form reading rhythm */
+.apedi-md-preview,
+.apedi-md-viewport {
+    background-color: alpha(currentColor, 0.025);
+}
 .apedi-md-prose {
-    font-size: 1.02em;
-    margin: 4px 0 8px;
+    font-size: 1.10em;
+    color: alpha(currentColor, 0.92);
+    margin: 2px 0 14px;
 }
 .apedi-md-heading-1,
 .apedi-md-heading-2,
@@ -66,43 +71,45 @@ aboutdialog button.link:focus { text-decoration: none; }
 .apedi-md-heading-4,
 .apedi-md-heading-5,
 .apedi-md-heading-6 {
-    margin-top: 18px;
-    margin-bottom: 8px;
+    color: currentColor;
+    margin-top: 24px;
+    margin-bottom: 12px;
 }
 .apedi-md-heading-1 {
-    padding-bottom: 9px;
+    padding-bottom: 11px;
     border-bottom: 1px solid alpha(currentColor, 0.18);
 }
 .apedi-md-heading-2 {
-    padding-bottom: 7px;
+    padding-bottom: 9px;
     border-bottom: 1px solid alpha(currentColor, 0.11);
 }
-.apedi-md-heading-3 { margin-top: 14px; }
+.apedi-md-heading-3 { margin-top: 20px; }
 .apedi-md-list {
-    margin-top: 3px;
-    margin-bottom: 10px;
+    margin-top: 4px;
+    margin-bottom: 16px;
 }
 .apedi-md-quote {
     color: alpha(currentColor, 0.82);
-    background: alpha(currentColor, 0.045);
+    background: alpha(currentColor, 0.055);
     border-left: 3px solid alpha(currentColor, 0.30);
-    border-radius: 0 6px 6px 0;
-    padding: 10px 14px;
-    margin: 7px 0 13px;
+    border-radius: 0 8px 8px 0;
+    padding: 12px 16px;
+    margin: 8px 0 18px;
 }
 separator.apedi-md-break {
     min-height: 1px;
     background: alpha(currentColor, 0.16);
-    margin: 18px 0;
+    margin: 24px 0;
 }
 
 /* Markdown preview - tables */
 frame.apedi-md-table {
     border: 1px solid alpha(currentColor, 0.15);
     border-radius: 8px;
-    margin: 10px 0 14px;
+    margin: 12px 0 18px;
 }
 .apedi-md-table > grid > label {
+    font-size: 1.02em;
     padding: 8px 12px;
     background: transparent;
 }
@@ -130,7 +137,7 @@ frame.apedi-md-code {
         0 0 0 1px alpha(currentColor, 0.10),
         0 1px 2px alpha(black, 0.06),
         0 2px 4px alpha(black, 0.035);
-    margin: 10px 1px 14px;
+    margin: 12px 1px 18px;
 }
 .apedi-md-code-language {
     font-family: monospace;

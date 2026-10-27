@@ -35,8 +35,8 @@ def test_is_markdown_path_no(name: str) -> None:
 
 
 def test_content_margin_limits_long_lines_without_squeezing_split_view() -> None:
-    assert mp._content_margin(500) == 24
-    assert mp._content_margin(1024) == 132
+    assert mp._content_margin(500) == 28
+    assert mp._content_margin(1024) == 152
 
 
 def test_module_import_does_not_load_markdown() -> None:

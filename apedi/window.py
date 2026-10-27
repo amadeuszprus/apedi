@@ -85,6 +85,7 @@ class EditorTab(Gtk.Paned):
         self._minimap = GtkSource.Map()
         self._minimap.set_view(self.view)
         self._minimap.set_vexpand(True)
+        self._show_minimap = settings.show_minimap
         editor_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
         editor_box.append(self._editor_scroll)
         editor_box.append(self._minimap)
@@ -254,8 +255,12 @@ class EditorTab(Gtk.Paned):
             Gtk.PolicyType.AUTOMATIC,
         )
         self.view.set_monospace(True)
+        self._show_minimap = s.show_minimap
         if hasattr(self, "_minimap"):
-            self._minimap.set_visible(s.show_minimap)
+            # In a Markdown split the map consumes a disproportionate amount
+            # of the already narrow source pane and makes wrapped prose nearly
+            # unreadable. The preference still applies in normal editor mode.
+            self._minimap.set_visible(self._show_minimap and not self.preview_visible)
         css = Gtk.CssProvider()
         css.load_from_string(
             f"textview {{ font-family: '{s.font}'; font-size: {s.font_size}pt; }}"
@@ -405,6 +410,7 @@ class EditorTab(Gtk.Paned):
                 return False
             preview.set_visible(True)
             self.preview_visible = True
+            self._minimap.set_visible(False)
             text = self.buffer.get_full_text()
             base = self.buffer.path.parent if self.buffer.path else None
             preview.update(text, base)
@@ -414,6 +420,7 @@ class EditorTab(Gtk.Paned):
         if self.preview is not None:
             self.preview.set_visible(False)
         self.preview_visible = False
+        self._minimap.set_visible(self._show_minimap)
         return True
 
     def bump_preview(self) -> None:
